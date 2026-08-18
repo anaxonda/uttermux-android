@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">UtterMux</string>
+    <string name="tts_engine_label">UtterMux voices</string>
+    <string name="process_text_label">Read with UtterMux</string>
+    <string name="koreader_channel">KOReader compatibility</string>
+</resources>
