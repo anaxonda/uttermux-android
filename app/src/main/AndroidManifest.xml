@@ -12,8 +12,11 @@
             <intent-filter><action android:name="android.intent.action.PROCESS_TEXT"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
             <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
         </activity>
-        <service android:name=".service.UtterMuxTtsService" android:exported="true" android:permission="android.permission.BIND_TEXT_SERVICE">
-            <intent-filter><action android:name="android.intent.action.TTS_SERVICE"/></intent-filter>
+        <service android:name=".service.UtterMuxTtsService" android:exported="true" android:label="@string/tts_engine_label" android:permission="android.permission.BIND_TEXT_SERVICE">
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
             <meta-data android:name="android.speech.tts" android:resource="@xml/tts_engine"/>
         </service>
         <service android:name=".service.KoReaderServerService" android:exported="false" android:foregroundServiceType="dataSync" />
