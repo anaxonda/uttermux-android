@@ -93,8 +93,11 @@ class MainActivity : ComponentActivity() {
                         TextButton(enabled = installed, onClick = {
                             status = "Previewing ${voice.name}…"
                             scope.launch {
-                                runCatching { withContext(Dispatchers.IO) { app.router.synthesize(voice.id, sample(voice.locale.language), voice.locale.toLanguageTag(), 1f, AtomicBoolean()) } }
-                                    .onSuccess { audio -> withContext(Dispatchers.IO) { Playback.play(audio) }; status = "Previewed ${voice.name}" }
+                                runCatching { withContext(Dispatchers.IO) {
+                                    val audio = app.router.synthesize(voice.id, sample(voice.locale.language), voice.locale.toLanguageTag(), 1f, AtomicBoolean())
+                                    Playback.play(audio)
+                                } }
+                                    .onSuccess { status = "Previewed ${voice.name}" }
                                     .onFailure { status = it.message ?: "Preview failed" }
                             }
                         }) { Text("▶") }
