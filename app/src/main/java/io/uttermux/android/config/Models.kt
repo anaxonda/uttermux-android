@@ -30,4 +30,13 @@ object Languages {
         val a = normalized(capability); val b = normalized(requested)
         return a == b || a.substringBefore('-') == b.substringBefore('-')
     }
+    private val iso3Languages by lazy { Locale.getISOLanguages().associateBy { runCatching { Locale(it).isO3Language.lowercase() }.getOrDefault(it) } }
+    private val iso3Countries by lazy { Locale.getISOCountries().associateBy { runCatching { Locale("",it).isO3Country.uppercase() }.getOrDefault(it) } }
+    fun fromAndroid(language:String?,country:String?):String {
+        val rawLanguage=language.orEmpty().lowercase().ifBlank{"en"}
+        val lang=if(rawLanguage.length==3) iso3Languages[rawLanguage]?:rawLanguage else rawLanguage
+        val rawCountry=country.orEmpty().uppercase()
+        val region=when{rawCountry.length==3->iso3Countries[rawCountry]?:rawCountry;else->rawCountry}
+        return normalized(listOf(lang,region.takeIf(String::isNotBlank)).filterNotNull().joinToString("-"))
+    }
 }

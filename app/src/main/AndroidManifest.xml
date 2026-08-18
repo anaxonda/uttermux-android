@@ -12,6 +12,14 @@
             <intent-filter><action android:name="android.intent.action.PROCESS_TEXT"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
             <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
         </activity>
+        <activity android:name=".TtsDataActivity" android:exported="true" android:theme="@style/Theme.UtterMux">
+            <intent-filter>
+                <action android:name="android.speech.tts.engine.CHECK_TTS_DATA"/>
+                <action android:name="android.speech.tts.engine.GET_SAMPLE_TEXT"/>
+                <action android:name="android.speech.tts.engine.INSTALL_TTS_DATA"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
         <service android:name=".service.UtterMuxTtsService" android:exported="true" android:label="@string/tts_engine_label" android:permission="android.permission.BIND_TEXT_SERVICE">
             <intent-filter>
                 <action android:name="android.intent.action.TTS_SERVICE"/>

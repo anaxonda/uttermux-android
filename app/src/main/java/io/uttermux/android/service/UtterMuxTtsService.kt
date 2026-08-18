@@ -4,6 +4,7 @@ import android.media.AudioFormat
 import android.speech.tts.*
 import io.uttermux.android.UtterMuxApp
 import io.uttermux.android.config.Languages
+import android.util.Log
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -11,7 +12,7 @@ class UtterMuxTtsService : TextToSpeechService() {
     @Volatile private var cancelled = AtomicBoolean()
     private val router get() = UtterMuxApp.instance.router
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
-        val tag = listOfNotNull(lang, country?.takeIf(String::isNotBlank)).joinToString("-")
+        val tag = Languages.fromAndroid(lang,country)
         return if (router.voices.any { v -> v.languages.any { Languages.matches(it, tag) } }) TextToSpeech.LANG_COUNTRY_AVAILABLE else TextToSpeech.LANG_NOT_SUPPORTED
     }
     override fun onLoadLanguage(lang: String?, country: String?, variant: String?): Int = onIsLanguageAvailable(lang, country, variant)
@@ -26,8 +27,7 @@ class UtterMuxTtsService : TextToSpeechService() {
     override fun onStop() { cancelled.set(true) }
     override fun onSynthesizeText(request: SynthesisRequest, callback: SynthesisCallback) {
         val signal = AtomicBoolean(); cancelled = signal
-        val locale = Locale.Builder().setLanguage(request.language.ifBlank { "und" })
-            .apply { request.country.takeIf(String::isNotBlank)?.let(::setRegion) }.build().toLanguageTag()
+        val locale = Languages.fromAndroid(request.language,request.country)
         try {
             val audio = router.synthesize(request.voiceName, request.charSequenceText.toString(), locale, request.speechRate / 100f, signal)
             if (signal.get()) { callback.error(TextToSpeech.ERROR_SYNTHESIS); return }
@@ -40,6 +40,6 @@ class UtterMuxTtsService : TextToSpeechService() {
             }
             if (signal.get()) callback.error(TextToSpeech.ERROR_SYNTHESIS) else callback.done()
         } catch (_: InterruptedException) { callback.error(TextToSpeech.ERROR_SYNTHESIS) }
-        catch (_: Throwable) { callback.error(TextToSpeech.ERROR_SYNTHESIS) }
+        catch (error: Throwable) { Log.e("UtterMuxTTS","Synthesis failed for $locale/${request.voiceName}: ${error.message}",error);callback.error(TextToSpeech.ERROR_SYNTHESIS) }
     }
 }
