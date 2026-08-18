@@ -7,8 +7,25 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class ElevenLabsProvider(private val secure: SecureStore) : TtsProvider {
     private val languages = setOf("ar","bg","cs","da","de","el","en","es","fi","fil","fr","hi","hr","hu","id","it","ja","ko","ms","nl","no","pl","pt","ro","ru","sk","sv","ta","tr","uk","vi","zh")
-    private val builtins = listOf("pqHfZKP75CvOlQylNhV4" to "Bill")
-    override val voices = builtins.map { (id,name) -> VoiceRecord("elevenlabs/$id@en-US", "$name · ElevenLabs", Locale.US, ProviderKind.ELEVENLABS, "eleven_flash_v2_5", languages, true) }
+    @Volatile private var catalog = listOf(VoiceRecord("elevenlabs/pqHfZKP75CvOlQylNhV4@en-US", "Bill · ElevenLabs", Locale.US, ProviderKind.ELEVENLABS, "eleven_flash_v2_5", languages, true))
+    override val voices get() = catalog
+    fun refresh() {
+        val key = secure.get("elevenlabs"); if (key.isBlank()) return
+        val found = mutableListOf<VoiceRecord>(); var token: String? = null
+        do {
+            val suffix = token?.let { "&next_page_token=${java.net.URLEncoder.encode(it, "UTF-8")}" } ?: ""
+            val json = JSONObject(String(HttpAudio.get("https://api.elevenlabs.io/v2/voices?page_size=100&sort=name&sort_direction=asc$suffix", mapOf("xi-api-key" to key)), Charsets.UTF_8))
+            val array = json.getJSONArray("voices")
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i); val labels = item.optJSONObject("labels") ?: JSONObject()
+                val details = listOf(labels.optString("accent"), labels.optString("gender"), item.optString("description")).filter(String::isNotBlank).joinToString(" · ")
+                found += VoiceRecord("elevenlabs/${item.getString("voice_id")}@en-US", "${item.optString("name", "Voice")} · ElevenLabs", Locale.US,
+                    ProviderKind.ELEVENLABS, "eleven_flash_v2_5", languages, true, details, item.optString("preview_url"))
+            }
+            token = json.optString("next_page_token").takeIf { json.optBoolean("has_more") && it.isNotBlank() }
+        } while (token != null)
+        if (found.isNotEmpty()) catalog = found
+    }
     override fun synthesize(voice: VoiceRecord, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData {
         val key = secure.get("elevenlabs"); require(key.isNotBlank()) { "ElevenLabs API key is not configured" }
         val external = voice.id.substringAfter('/').substringBefore('@')

@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider>) {
     private val providers = providers.associateBy { it.voices.firstOrNull()?.provider }
-    val voices = providers.flatMap { it.voices }
+    val voices get() = providers.values.flatMap { it.voices }
     fun voice(id: String): VoiceRecord? = voices.firstOrNull { it.id == id || it.id.substringBefore('@') == id.substringBefore('@') }
     fun candidates(requestedVoice: String?, language: String): List<VoiceRecord> {
         val result = mutableListOf<VoiceRecord>()

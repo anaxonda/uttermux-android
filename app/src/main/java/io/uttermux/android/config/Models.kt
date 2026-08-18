@@ -12,6 +12,10 @@ data class VoiceRecord(
     val model: String,
     val languages: Set<String>,
     val networkRequired: Boolean,
+    val description: String = "",
+    val previewUrl: String = "",
+    val downloadId: String = "",
+    val downloadable: Boolean = true,
 )
 
 data class AudioData(val sampleRate: Int, val pcm16: ByteArray)

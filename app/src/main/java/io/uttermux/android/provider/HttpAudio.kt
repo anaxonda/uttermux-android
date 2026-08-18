@@ -18,6 +18,14 @@ object HttpAudio {
             return response.body.bytes()
         }
     }
+    fun get(url: String, headers: Map<String, String> = emptyMap()): ByteArray {
+        val builder = Request.Builder().url(url)
+        headers.forEach(builder::header)
+        client.newCall(builder.build()).execute().use { response ->
+            if (!response.isSuccessful) throw ProviderException(response.code, response.body.string().take(1000))
+            return response.body.bytes()
+        }
+    }
 }
 
 class ProviderException(val status: Int, detail: String) : RuntimeException("Provider HTTP $status: $detail")

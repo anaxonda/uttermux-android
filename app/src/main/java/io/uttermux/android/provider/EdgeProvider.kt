@@ -9,6 +9,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -22,10 +23,21 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class EdgeProvider(private val context: Context) : TtsProvider {
-    override val voices = listOf(
+    @Volatile private var catalog = listOf(
         VoiceRecord("edge/en-US-AriaNeural@en-US", "Aria · Edge", Locale.US, ProviderKind.EDGE, "Edge", setOf("en-US"), true),
         VoiceRecord("edge/fr-FR-DeniseNeural@fr-FR", "Denise · Edge", Locale.FRANCE, ProviderKind.EDGE, "Edge", setOf("fr-FR"), true),
     )
+    override val voices get() = catalog
+    fun refresh() {
+        val url = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=$TOKEN"
+        val array = JSONArray(String(HttpAudio.get(url, mapOf("User-Agent" to USER_AGENT)), Charsets.UTF_8))
+        val found = (0 until array.length()).map { index ->
+            val item = array.getJSONObject(index); val locale = item.getString("Locale").replace('_', '-')
+            VoiceRecord("edge/${item.getString("ShortName")}@$locale", "${item.optString("FriendlyName", item.getString("ShortName"))} · Edge",
+                Locale.forLanguageTag(locale), ProviderKind.EDGE, "Edge Neural", setOf(locale), true, item.optString("Gender"))
+        }
+        if (found.isNotEmpty()) catalog = found
+    }
     override fun synthesize(voice: VoiceRecord, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData {
         val connectionId = UUID.randomUUID().toString().replace("-", "")
         val url = "$WSS&ConnectionId=$connectionId&Sec-MS-GEC=${gec()}&Sec-MS-GEC-Version=1-143.0.3650.75"
