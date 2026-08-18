@@ -11,7 +11,7 @@ class UtterMuxApp : Application() {
         super.onCreate(); instance = this
         secure = SecureStore(this); settings = AppSettings(this)
         models=ModelManager(this)
-        router = VoiceRouter(settings, listOf(GrokProvider(secure), ElevenLabsProvider(secure), EdgeProvider(), SherpaProvider(this)))
+        router = VoiceRouter(settings, listOf(GrokProvider(secure), ElevenLabsProvider(secure), EdgeProvider(this), SherpaProvider(this)))
     }
     companion object { lateinit var instance: UtterMuxApp; private set }
 }

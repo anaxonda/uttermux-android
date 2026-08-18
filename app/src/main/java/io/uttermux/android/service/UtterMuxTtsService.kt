@@ -26,7 +26,8 @@ class UtterMuxTtsService : TextToSpeechService() {
     override fun onStop() { cancelled.set(true) }
     override fun onSynthesizeText(request: SynthesisRequest, callback: SynthesisCallback) {
         val signal = AtomicBoolean(); cancelled = signal
-        val locale = Locale(request.language.ifBlank { "en" }, request.country.orEmpty()).toLanguageTag()
+        val locale = Locale.Builder().setLanguage(request.language.ifBlank { "und" })
+            .apply { request.country.takeIf(String::isNotBlank)?.let(::setRegion) }.build().toLanguageTag()
         try {
             val audio = router.synthesize(request.voiceName, request.charSequenceText.toString(), locale, request.speechRate / 100f, signal)
             if (signal.get()) { callback.error(TextToSpeech.ERROR_SYNTHESIS); return }

@@ -28,8 +28,7 @@ For KOReader, enable the compatibility server in UtterMux and install
 - Grok/xAI: multilingual PCM with automatic language selection.
 - ElevenLabs: Flash v2.5 PCM.
 - Sherpa-ONNX: Kokoro, Kitten, Piper, and Inflect models.
-- Edge: experimental adapter (currently shown as unavailable until its native
-  transport is enabled).
+- Edge: WebSocket synthesis with on-device MP3-to-PCM decoding (no API key).
 
 The project is GPL-3.0-or-later. The pinned sherpa-onnx JNI wrapper and native
 libraries are Apache-2.0 components from k2-fsa.

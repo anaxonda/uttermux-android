@@ -29,6 +29,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (android.os.Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        val app = UtterMuxApp.instance
+        if (intent.getBooleanExtra("enable_koreader", false)) app.settings.koReaderEnabled = true
+        if (app.settings.koReaderEnabled) startForegroundService(Intent(this, KoReaderServerService::class.java))
         setContent { MaterialTheme { ManagerScreen() } }
     }
 }

@@ -18,12 +18,15 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
         return result
     }
     fun synthesize(requestedVoice: String?, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData {
+        val effectiveLanguage = if (language.isBlank() || language == "und" || language == "auto" || requestedVoice == "uttermux:auto")
+            LanguageDetector.detect(text, language.takeUnless { it.isBlank() || it == "und" || it == "auto" } ?: "en-US")
+        else language
         var failure: Throwable? = null
-        for (voice in candidates(requestedVoice, language)) {
+        for (voice in candidates(requestedVoice, effectiveLanguage)) {
             if (cancelled.get()) throw InterruptedException()
-            try { return providers.getValue(voice.provider).synthesize(voice, text, language, speed, cancelled) }
+            try { return providers.getValue(voice.provider).synthesize(voice, text, effectiveLanguage, speed, cancelled) }
             catch (error: Throwable) { failure = error }
         }
-        throw RuntimeException("No voice could synthesize $language", failure)
+        throw RuntimeException("No voice could synthesize $effectiveLanguage", failure)
     }
 }

@@ -43,7 +43,7 @@ class KoReaderServerService : Service() {
             val header = readHeader(input); val first = header.lineSequence().first().split(' ')
             val method = first[0]; val path = first[1].substringBefore('?')
             val length = Regex("(?im)^Content-Length:\\s*(\\d+)").find(header)?.groupValues?.get(1)?.toInt() ?: 0
-            val body = if (length > 0) input.readNBytes(length).toString(Charsets.UTF_8) else "{}"
+            val body = if (length > 0) String(readBytes(input, length), Charsets.UTF_8) else "{}"
             val json = JSONObject(body)
             when {
                 method == "GET" && path == "/voices" -> respond(output, 200, voices(), "application/json")
@@ -81,7 +81,16 @@ class KoReaderServerService : Service() {
     private fun readHeader(input: InputStream): String {
         val bytes = ByteArrayOutputStream(); var state = 0
         while (bytes.size() < 32768) { val b = input.read(); if (b < 0) break; bytes.write(b); state = when { state == 0 && b == 13 -> 1; state == 1 && b == 10 -> 2; state == 2 && b == 13 -> 3; state == 3 && b == 10 -> 4; b == 13 -> 1; else -> 0 }; if (state == 4) break }
-        return bytes.toString(Charsets.US_ASCII)
+        return String(bytes.toByteArray(), Charsets.US_ASCII)
+    }
+    private fun readBytes(input: InputStream, length: Int): ByteArray {
+        val result = ByteArray(length); var offset = 0
+        while (offset < length) {
+            val count = input.read(result, offset, length - offset)
+            if (count < 0) throw EOFException("Request body ended early")
+            offset += count
+        }
+        return result
     }
     private fun respond(output: BufferedOutputStream, code: Int, body: String, type: String = "text/plain") {
         val data = body.toByteArray(); output.write("HTTP/1.1 $code ${if (code == 200) "OK" else "Error"}\r\nContent-Type: $type\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n".toByteArray()); output.write(data); output.flush()
