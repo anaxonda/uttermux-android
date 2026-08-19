@@ -23,6 +23,7 @@ class ModelManager(private val context: Context) {
     fun register(model:LocalModel) { synchronized(modelsById) { modelsById[model.id] = model } }
     fun model(id:String)=synchronized(modelsById) { modelsById[id] ?: error("Unknown model $id") }
     fun installed(id:String)=File(root,id).resolve(model(id).model).isFile
+    fun installedIds():Set<String> = models.mapNotNull { model -> model.id.takeIf { File(root,it).resolve(model.model).isFile } }.toSet()
     fun install(id:String, progress:(String)->Unit={}) {
         val model=model(id); val partial=File(context.cacheDir,"$id.part")
         progress("Downloading $id")

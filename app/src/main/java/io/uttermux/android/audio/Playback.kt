@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 
 object Playback {
     @Volatile private var track: AudioTrack? = null
-    fun play(audio: AudioData) {
+    fun play(audio: AudioData, onStarted: () -> Unit = {}) {
         stop()
         require(audio.pcm16.isNotEmpty()) { "No audio was generated" }
         val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
@@ -26,6 +26,7 @@ object Playback {
             }, Handler(Looper.getMainLooper()))
             player.notificationMarkerPosition = audio.pcm16.size / 2
             player.play()
+            onStarted()
             check(player.write(audio.pcm16, 0, audio.pcm16.size, AudioTrack.WRITE_BLOCKING) == audio.pcm16.size) { "Could not load preview audio" }
             val durationMs = audio.pcm16.size * 1000L / 2 / audio.sampleRate
             finished.await(durationMs + 2_000, TimeUnit.MILLISECONDS)

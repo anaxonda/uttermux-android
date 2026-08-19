@@ -18,6 +18,7 @@ class ElevenLabsProvider(private val secure: SecureStore) : TtsProvider {
     @Volatile private var catalog = listOf(VoiceRecord("elevenlabs/pqHfZKP75CvOlQylNhV4@en-US", "Bill · ElevenLabs", Locale.US, ProviderKind.ELEVENLABS, "eleven_flash_v2_5", languages, true))
     override val voices get() = catalog
     override fun isAvailable(voice: VoiceRecord) = configured()
+    override val availableVoices get()=if(configured())voices else emptyList()
     fun refresh() {
         val key = secure.get("elevenlabs"); if (key.isBlank()) return
         val found = mutableListOf<VoiceRecord>(); var token: String? = null

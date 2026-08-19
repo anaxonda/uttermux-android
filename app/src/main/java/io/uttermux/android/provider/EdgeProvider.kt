@@ -29,6 +29,7 @@ class EdgeProvider(private val context: Context) : TtsProvider {
         VoiceRecord("edge/fr-FR-DeniseNeural@fr-FR", "Denise · Edge", Locale.FRANCE, ProviderKind.EDGE, "Edge", setOf("fr-FR"), true),
     )
     override val voices get() = catalog
+    override val availableVoices get()=voices
     fun refresh() {
         val url = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=$TOKEN"
         val array = JSONArray(String(HttpAudio.get(url, mapOf("User-Agent" to USER_AGENT)), Charsets.UTF_8))

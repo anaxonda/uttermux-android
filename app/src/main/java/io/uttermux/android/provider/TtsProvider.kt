@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 interface TtsProvider {
     val kind: ProviderKind
     val voices: List<VoiceRecord>
+    val availableVoices: List<VoiceRecord> get() = voices.filter(::isAvailable)
     fun isAvailable(voice: VoiceRecord): Boolean = true
     fun synthesize(voice: VoiceRecord, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData
     fun stream(voice: VoiceRecord, text: String, language: String, speed: Float, pitch: Float,

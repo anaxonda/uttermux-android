@@ -21,7 +21,7 @@ class KoReaderServerService : Service() {
     private val cache = object : LinkedHashMap<String, Clip>(24, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Clip>?) = size > 20
     }
-    data class Clip(val audio: AudioData, @Volatile var startedAt: Long = 0) {
+    data class Clip(val audio: AudioData, @Volatile var startedAt: Long = 0, @Volatile var finished: Boolean = false) {
         val duration get() = audio.pcm16.size / 2.0 / audio.sampleRate
     }
     override fun onCreate() {
@@ -49,22 +49,29 @@ class KoReaderServerService : Service() {
                 method == "GET" && path == "/voices" -> respond(output, 200, voices(), "application/json")
                 method == "POST" && path == "/" -> {
                     val text = json.optString("text").trim(); require(text.isNotEmpty()) { "No text provided" }
-                    val requested = json.optString("voice").takeIf(String::isNotBlank)
                     val speed = (1.0 / json.optDouble("length_scale", 1.0)).toFloat()
                     val language = json.optString("language", "en-US")
-                    val key = digest("$text\u0000$requested\u0000$speed\u0000$language")
-                    synchronized(cache) { if (!cache.containsKey(key)) cache[key] = Clip(UtterMuxApp.instance.router.synthesize(requested, text, language, speed, AtomicBoolean())) }
+                    // Route through automatic mode so the app-wide default and fallback chain
+                    // take precedence over a stale provider voice saved by the KOReader plugin.
+                    val key = digest("$text\u0000auto\u0000$speed\u0000$language")
+                    synchronized(cache) { if (!cache.containsKey(key)) cache[key] = Clip(UtterMuxApp.instance.router.synthesize("uttermux:auto", text, language, speed, AtomicBoolean())) }
                     respond(output, 200, key)
                 }
                 method == "POST" && path == "/play" -> {
                     val clip = synchronized(cache) { cache[json.getString("handle")] } ?: error("Unknown handle")
-                    clip.startedAt = System.nanoTime(); pool.execute { Playback.play(clip.audio) }; respond(output, 200, "")
+                    clip.startedAt = 0; clip.finished = false
+                    pool.execute {
+                        try { Playback.play(clip.audio) { clip.startedAt = System.nanoTime() } }
+                        finally { clip.finished = true }
+                    }
+                    respond(output, 200, "")
                 }
-                method == "POST" && path == "/stop" -> { Playback.stop(); synchronized(cache) { cache[json.optString("handle")]?.startedAt = 0 }; respond(output, 200, "") }
+                method == "POST" && path == "/stop" -> { Playback.stop(); synchronized(cache) { cache[json.optString("handle")]?.apply { startedAt = 0; finished = true } }; respond(output, 200, "") }
                 method == "POST" && path == "/remaining" -> {
                     val clip = synchronized(cache) { cache[json.getString("handle")] } ?: error("Unknown handle")
                     val elapsed = if (clip.startedAt == 0L) 0.0 else (System.nanoTime() - clip.startedAt) / 1e9
-                    respond(output, 200, JSONObject().put("started", clip.startedAt != 0L).put("remaining", (clip.duration - elapsed).coerceAtLeast(0.0)).toString(), "application/json")
+                    val remaining = if (clip.finished) 0.0 else (clip.duration - elapsed).coerceAtLeast(0.02)
+                    respond(output, 200, JSONObject().put("started", clip.startedAt != 0L).put("remaining", remaining).toString(), "application/json")
                 }
                 else -> respond(output, 404, "Not found")
             }

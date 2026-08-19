@@ -10,6 +10,9 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SherpaProvider(context:Context, val manager:ModelManager=ModelManager(context)) : TtsProvider {
+    private class ChunkCallback(val block:(FloatArray)->Int):Function1<FloatArray,Int> {
+        override fun invoke(samples:FloatArray):Int=block(samples)
+    }
     override val kind=ProviderKind.SHERPA
     private data class Spec(val voice:VoiceRecord,val model:String,val speaker:Int)
     private val specs=mutableListOf(
@@ -39,6 +42,7 @@ class SherpaProvider(context:Context, val manager:ModelManager=ModelManager(cont
         }
     }
     override val voices get()=specs.map{it.voice}
+    override val availableVoices get()=manager.installedIds().let{installed->specs.filter{it.model in installed}.map{it.voice}}
     override fun isAvailable(voice:VoiceRecord)=specs.firstOrNull{it.voice.id==voice.id}?.let{runCatching{manager.installed(it.model)}.getOrDefault(false)}==true
     private val engines=object:LinkedHashMap<String,OfflineTts>(3,.75f,true){ override fun removeEldestEntry(e:MutableMap.MutableEntry<String,OfflineTts>?):Boolean { val remove=size>2;if(remove)e?.value?.release();return remove } }
     override fun synthesize(voice:VoiceRecord,text:String,language:String,speed:Float,cancelled:AtomicBoolean):AudioData {
@@ -53,10 +57,10 @@ class SherpaProvider(context:Context, val manager:ModelManager=ModelManager(cont
         val spec=specs.first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
         val tts=synchronized(engines){engines.getOrPut(spec.model){create(manager.model(spec.model),File(manager.root,spec.model))}}
         var callbackUsed=false
-        val generated=tts.generateWithConfig(text,GenerationConfig(speed=speed,sid=spec.speaker)){samples->
+        val generated=tts.generateWithConfig(text,GenerationConfig(speed=speed,sid=spec.speaker),ChunkCallback{samples->
             callbackUsed=true
             if(cancelled.get()||!emit(AudioData(tts.sampleRate(),pcm(samples)))) 0 else 1
-        }
+        })
         if(cancelled.get())throw InterruptedException()
         if(!callbackUsed)emit(AudioData(generated.sampleRate,pcm(generated.samples)))
     }

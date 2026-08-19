@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.uttermux.android.audio.CompressedAudioDecoder
 import io.uttermux.android.audio.Playback
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
     var language by remember { mutableStateOf("all") }; var model by remember { mutableStateOf("all") }
     var status by remember { mutableStateOf("Loading provider catalogs…") }; var koReader by remember { mutableStateOf(app.settings.koReaderEnabled) }
     var revision by remember { mutableIntStateOf(0) }
+    var showSettings by remember { mutableStateOf(false) }
     fun refresh() { scope.launch { val errors=withContext(Dispatchers.IO){app.refreshCatalogs()}; revision++; status=if(errors.isEmpty()) "Catalogs refreshed" else errors.joinToString() } }
     LaunchedEffect(Unit) { refresh() }
     val allVoices = remember(revision) { app.router.voices }
@@ -62,22 +64,19 @@ class MainActivity : ComponentActivity() {
         (language=="all"||voice.languages.any{Languages.matches(it,language)}) && (model=="all"||voice.model==model) &&
         (query.isBlank()||listOf(voice.name,voice.id,voice.model,voice.description,voice.languages.joinToString()).any{it.contains(query,true)})
     }
-    Scaffold(topBar={TopAppBar(title={Text("UtterMux")})}) { padding ->
-        LazyColumn(Modifier.padding(padding).padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+    Scaffold(topBar={TopAppBar(title={Text(if(showSettings) "Settings" else "UtterMux")},actions={
+        TextButton(onClick={showSettings=!showSettings}) { Text(if(showSettings) "Voices" else "Settings") }
+    })}) { padding ->
+        if(showSettings) SettingsList(
+            Modifier.padding(padding),theme,onTheme,grokKey,{grokKey=it},elevenKey,{elevenKey=it},koReader,
+            { enabled->koReader=enabled;app.settings.koReaderEnabled=enabled;val intent=Intent(app,KoReaderServerService::class.java);if(enabled)app.startForegroundService(intent)else app.stopService(intent) },
+            status
+        ) { app.secure.put("grok",grokKey.trim());app.secure.put("elevenlabs",elevenKey.trim());status="Keys encrypted; refreshing…";refresh() }
+        else LazyColumn(Modifier.padding(padding).padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             item { Text("Linux-style routing for Android and KOReader",style=MaterialTheme.typography.titleMedium) }
             item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 Button(onClick={app.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}){Text("Android TTS settings")}
                 OutlinedButton(onClick={refresh()}){Text("Refresh catalogs")}
-            } }
-            item { Selector("Theme",theme,listOf("system","light","dark"),onTheme) }
-            item { OutlinedTextField(grokKey,{grokKey=it},Modifier.fillMaxWidth(),label={Text("Grok API key")},singleLine=true) }
-            item { OutlinedTextField(elevenKey,{elevenKey=it},Modifier.fillMaxWidth(),label={Text("ElevenLabs API key")},singleLine=true) }
-            item { Button(onClick={
-                app.secure.put("grok",grokKey.trim());app.secure.put("elevenlabs",elevenKey.trim());status="Keys encrypted; refreshing…";refresh()
-            }){Text("Save keys and refresh")}}
-            item { Row(verticalAlignment=Alignment.CenterVertically) {
-                Switch(koReader,{enabled->koReader=enabled;app.settings.koReaderEnabled=enabled;val intent=Intent(app,KoReaderServerService::class.java);if(enabled)app.startForegroundService(intent)else app.stopService(intent)})
-                Spacer(Modifier.width(8.dp));Column{Text("KOReader server · localhost:5000");Text(if(koReader)"Enabled" else "Disabled",style=MaterialTheme.typography.bodySmall)}
             } }
             item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),label={Text("Search voice, accent, language, or model")},singleLine=true) }
             item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -109,6 +108,28 @@ class MainActivity : ComponentActivity() {
                 } }
             }
         }
+    }
+}
+
+@Composable private fun SettingsList(
+    modifier:Modifier,theme:String,onTheme:(String)->Unit,grokKey:String,onGrok:(String)->Unit,
+    elevenKey:String,onEleven:(String)->Unit,koReader:Boolean,onKoReader:(Boolean)->Unit,
+    status:String,onSave:()->Unit
+) {
+    LazyColumn(modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        item { Text("Appearance and integrations",style=MaterialTheme.typography.titleMedium) }
+        item { Selector("Theme",theme,listOf("system","light","dark"),onTheme) }
+        item { Row(verticalAlignment=Alignment.CenterVertically) {
+            Switch(koReader,onKoReader);Spacer(Modifier.width(8.dp))
+            Column { Text("KOReader bridge · localhost:5000");Text(if(koReader)"Enabled" else "Disabled",style=MaterialTheme.typography.bodySmall) }
+        } }
+        item { HorizontalDivider() }
+        item { Text("Provider credentials",style=MaterialTheme.typography.titleMedium) }
+        item { Text("Keys are encrypted with Android Keystore and remain on this device.",style=MaterialTheme.typography.bodySmall) }
+        item { OutlinedTextField(grokKey,onGrok,Modifier.fillMaxWidth(),label={Text("Grok API key")},singleLine=true,visualTransformation=PasswordVisualTransformation()) }
+        item { OutlinedTextField(elevenKey,onEleven,Modifier.fillMaxWidth(),label={Text("ElevenLabs API key")},singleLine=true,visualTransformation=PasswordVisualTransformation()) }
+        item { Button(onClick=onSave){Text("Save keys and refresh")} }
+        item { Text(status,style=MaterialTheme.typography.bodySmall) }
     }
 }
 

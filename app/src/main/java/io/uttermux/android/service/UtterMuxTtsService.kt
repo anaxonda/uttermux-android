@@ -30,7 +30,8 @@ class UtterMuxTtsService : TextToSpeechService() {
     override fun onGetLanguage(): Array<String> = arrayOf("eng", "USA", "")
     override fun onGetVoices(): MutableList<Voice> {
         val ready=router.availableVoices
-        val languages=ready.flatMap{it.languages}.map(Languages::normalized).distinct()
+        val specific=ready.flatMap{it.languages}.map(Languages::normalized)
+        val languages=(specific+specific.map{it.substringBefore('-')}).distinct()
         val automatic=languages.map { language ->
             val candidates=router.candidates("uttermux:auto@$language",language)
             Voice("uttermux:auto@$language",Locale.forLanguageTag(language),Voice.QUALITY_HIGH,Voice.LATENCY_NORMAL,
