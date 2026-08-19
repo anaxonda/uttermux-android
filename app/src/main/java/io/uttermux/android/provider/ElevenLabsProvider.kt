@@ -6,7 +6,8 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ElevenLabsProvider(private val secure: SecureStore) : TtsProvider {
-    override val kind=ProviderKind.ELEVENLABS
+    override val id=ProviderIds.ELEVENLABS
+    override val descriptor=ProviderDescriptor(id,"ElevenLabs",credentialFields=listOf(CredentialField("elevenlabs","API key")))
     @Volatile private var keyAvailable=false
     @Volatile private var keyCheckedAt=0L
     private fun configured():Boolean {
@@ -15,11 +16,11 @@ class ElevenLabsProvider(private val secure: SecureStore) : TtsProvider {
         return keyAvailable
     }
     private val languages = setOf("ar","bg","cs","da","de","el","en","es","fi","fil","fr","hi","hr","hu","id","it","ja","ko","ms","nl","no","pl","pt","ro","ru","sk","sv","ta","tr","uk","vi","zh")
-    @Volatile private var catalog = listOf(VoiceRecord("elevenlabs/pqHfZKP75CvOlQylNhV4@en-US", "Bill · ElevenLabs", Locale.US, ProviderKind.ELEVENLABS, "eleven_flash_v2_5", languages, true))
+    @Volatile private var catalog = listOf(VoiceRecord("elevenlabs/pqHfZKP75CvOlQylNhV4@en-US", "Bill · ElevenLabs", Locale.US, ProviderIds.ELEVENLABS, "eleven_flash_v2_5", languages, true))
     override val voices get() = catalog
     override fun isAvailable(voice: VoiceRecord) = configured()
     override val availableVoices get()=if(configured())voices else emptyList()
-    fun refresh() {
+    override fun refresh() {
         val key = secure.get("elevenlabs"); if (key.isBlank()) return
         val found = mutableListOf<VoiceRecord>(); var token: String? = null
         do {
@@ -30,7 +31,7 @@ class ElevenLabsProvider(private val secure: SecureStore) : TtsProvider {
                 val item = array.getJSONObject(i); val labels = item.optJSONObject("labels") ?: JSONObject()
                 val details = listOf(labels.optString("accent"), labels.optString("gender"), item.optString("description")).filter(String::isNotBlank).joinToString(" · ")
                 found += VoiceRecord("elevenlabs/${item.getString("voice_id")}@en-US", "${item.optString("name", "Voice")} · ElevenLabs", Locale.US,
-                    ProviderKind.ELEVENLABS, "eleven_flash_v2_5", languages, true, details, item.optString("preview_url"))
+                    ProviderIds.ELEVENLABS, "eleven_flash_v2_5", languages, true, details, item.optString("preview_url"))
             }
             token = json.optString("next_page_token").takeIf { json.optBoolean("has_more") && it.isNotBlank() }
         } while (token != null)
@@ -46,13 +47,15 @@ class ElevenLabsProvider(private val secure: SecureStore) : TtsProvider {
         return AudioData(24000, HttpAudio.post("https://api.elevenlabs.io/v1/text-to-speech/$external/stream?output_format=pcm_24000", body,
             mapOf("xi-api-key" to key, "Accept" to "audio/pcm"), cancelled))
     }
-    override fun stream(voice:VoiceRecord,text:String,language:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioData)->Boolean) {
+    override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean) {
+        val voice=session.voice;val language=session.language
         val key=secure.get("elevenlabs");require(key.isNotBlank()){ "ElevenLabs API key is not configured" }
         val external=voice.id.substringAfter('/').substringBefore('@')
         val body=JSONObject().put("text",text).put("model_id","eleven_flash_v2_5")
             .put("language_code",Languages.normalized(language).substringBefore('-'))
             .put("voice_settings",JSONObject().put("speed",speed.coerceIn(.7f,1.2f)))
+        var sequence=0;val range=TextRange(0,text.length)
         HttpAudio.postStream("https://api.elevenlabs.io/v1/text-to-speech/$external/stream?output_format=pcm_24000",body,
-            mapOf("xi-api-key" to key,"Accept" to "audio/pcm"),cancelled){emit(AudioData(24000,it))}
+            mapOf("xi-api-key" to key,"Accept" to "audio/pcm"),cancelled){emit(AudioChunk(it,24000,range,sequence++))}
     }
 }

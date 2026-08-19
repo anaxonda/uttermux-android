@@ -23,4 +23,17 @@ class PcmTransformTest {
     @Test fun pitchOutputRemainsPcm16Aligned() {
         assertEquals(0,PcmTransform.pitchPcm16(pcm(0,100,200,300,400),1.37f).size%2)
     }
+
+    @Test fun resamplingChangesDurationWithoutBreakingAlignment(){
+        val input=pcm(*IntArray(2205){it%1000})
+        val output=PcmTransform.resamplePcm16(input,22050,24000)
+        assertEquals(2400*2,output.size)
+        assertEquals(0,output.size%2)
+    }
+
+    @Test fun silenceTrimmingIsBounded(){
+        val input=pcm(*IntArray(100){0},*IntArray(100){1000},*IntArray(100){0})
+        val output=PcmTransform.trimSilence(input,1000,maxLeadingMs=50,maxTrailingMs=50)
+        assertEquals(200*2,output.size)
+    }
 }

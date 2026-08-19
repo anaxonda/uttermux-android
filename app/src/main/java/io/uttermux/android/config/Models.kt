@@ -2,13 +2,29 @@ package io.uttermux.android.config
 
 import java.util.Locale
 
-enum class ProviderKind { GROK, ELEVENLABS, EDGE, SHERPA }
+object ProviderIds {
+    const val GROK="grok";const val ELEVENLABS="elevenlabs";const val EDGE="edge";const val SHERPA="sherpa"
+    const val AZURE="azure";const val GOOGLE="google";const val QWEN="qwen";const val OPENAI="openai"
+    const val DEEPGRAM="deepgram";const val AWS="aws";const val CARTESIA="cartesia";const val PLAYHT="playht"
+    const val RESEMBLE="resemble";const val CUSTOM="custom"
+}
+
+data class CredentialField(val key:String,val label:String,val secret:Boolean=true,val placeholder:String="")
+data class ProviderDescriptor(
+    val id:String,val name:String,val network:Boolean=true,val experimental:Boolean=false,
+    val credentialFields:List<CredentialField> = emptyList(),val note:String="",
+)
+
+data class ModelCatalogEntry(
+    val id:String,val family:String,val title:String,val languages:Set<String>,val status:String,
+    val approxSizeMb:Int=0,val license:String="",val description:String="",val sourceUrl:String="",
+)
 
 data class VoiceRecord(
     val id: String,
     val name: String,
     val locale: Locale,
-    val provider: ProviderKind,
+    val provider: String,
     val model: String,
     val languages: Set<String>,
     val networkRequired: Boolean,
@@ -16,6 +32,11 @@ data class VoiceRecord(
     val previewUrl: String = "",
     val downloadId: String = "",
     val downloadable: Boolean = true,
+    val status:String = "available",
+    val experimental:Boolean = false,
+    val approxSizeMb:Int = 0,
+    val license:String = "",
+    val capabilities:Set<String> = emptySet(),
 )
 
 data class AudioData(val sampleRate: Int, val pcm16: ByteArray)

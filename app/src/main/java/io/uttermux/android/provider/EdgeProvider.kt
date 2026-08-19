@@ -23,29 +23,33 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class EdgeProvider(private val context: Context) : TtsProvider {
-    override val kind=ProviderKind.EDGE
+    override val id=ProviderIds.EDGE
+    override val descriptor=ProviderDescriptor(id,"Edge Read Aloud",experimental=true,note="Uses Microsoft's unofficial consumer Read Aloud endpoint and may break without notice.")
     @Volatile private var catalog = listOf(
-        VoiceRecord("edge/en-US-AriaNeural@en-US", "Aria · Edge", Locale.US, ProviderKind.EDGE, "Edge", setOf("en-US"), true),
-        VoiceRecord("edge/fr-FR-DeniseNeural@fr-FR", "Denise · Edge", Locale.FRANCE, ProviderKind.EDGE, "Edge", setOf("fr-FR"), true),
+        VoiceRecord("edge/en-US-AriaNeural@en-US", "Aria · Edge", Locale.US, ProviderIds.EDGE, "Edge", setOf("en-US"), true),
+        VoiceRecord("edge/fr-FR-DeniseNeural@fr-FR", "Denise · Edge", Locale.FRANCE, ProviderIds.EDGE, "Edge", setOf("fr-FR"), true),
     )
     override val voices get() = catalog
     override val availableVoices get()=voices
-    fun refresh() {
+    override fun refresh() {
         val url = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=$TOKEN"
         val array = JSONArray(String(HttpAudio.get(url, mapOf("User-Agent" to USER_AGENT)), Charsets.UTF_8))
         val found = (0 until array.length()).map { index ->
             val item = array.getJSONObject(index); val locale = item.getString("Locale").replace('_', '-')
             VoiceRecord("edge/${item.getString("ShortName")}@$locale", "${item.optString("FriendlyName", item.getString("ShortName"))} · Edge",
-                Locale.forLanguageTag(locale), ProviderKind.EDGE, "Edge Neural", setOf(locale), true, item.optString("Gender"))
+                Locale.forLanguageTag(locale), ProviderIds.EDGE, "Edge Neural", setOf(locale), true, item.optString("Gender"))
         }
         if (found.isNotEmpty()) catalog = found
     }
     override fun synthesize(voice: VoiceRecord, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData {
         return synthesizeWithPitch(voice,text,language,speed,1f,cancelled)
     }
-    override fun stream(voice:VoiceRecord,text:String,language:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioData)->Boolean) {
+    override fun strategy(voice:VoiceRecord)=StreamStrategy.BUFFERED
+    override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean) {
+        val voice=session.voice;val language=session.language
         // Pitch is applied uniformly to emitted PCM by the Android service.
-        emit(synthesizeWithPitch(voice,text,language,speed,1f,cancelled))
+        val audio=synthesizeWithPitch(voice,text,language,speed,1f,cancelled)
+        emit(AudioChunk(audio.pcm16,audio.sampleRate,TextRange(0,text.length),0))
     }
     private fun synthesizeWithPitch(voice: VoiceRecord, text: String, language: String, speed: Float, pitch:Float, cancelled: AtomicBoolean): AudioData {
         val connectionId = UUID.randomUUID().toString().replace("-", "")

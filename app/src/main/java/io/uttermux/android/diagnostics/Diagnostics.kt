@@ -1,0 +1,20 @@
+package io.uttermux.android.diagnostics
+
+import android.util.Log
+import java.util.ArrayDeque
+import java.util.concurrent.atomic.AtomicLong
+
+data class DiagnosticEvent(val requestId:Long,val atMillis:Long,val name:String,val detail:String="")
+
+object Diagnostics {
+    private val ids=AtomicLong();private val events=ArrayDeque<DiagnosticEvent>();private const val LIMIT=500
+    fun request(detail:String):Long=ids.incrementAndGet().also{record(it,"request",detail)}
+    @Synchronized fun record(id:Long,name:String,detail:String="") {
+        events.addLast(DiagnosticEvent(id,System.currentTimeMillis(),name,detail))
+        while(events.size>LIMIT)events.removeFirst()
+        Log.i("UtterMuxTiming","#$id $name $detail")
+    }
+    @Synchronized fun recent():List<DiagnosticEvent> = events.toList()
+    @Synchronized fun clear(){events.clear()}
+    fun report():String=recent().joinToString("\n"){"${it.atMillis}\t#${it.requestId}\t${it.name}\t${it.detail}"}
+}

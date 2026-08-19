@@ -8,6 +8,8 @@ import io.uttermux.android.R
 import io.uttermux.android.UtterMuxApp
 import io.uttermux.android.audio.Playback
 import io.uttermux.android.config.AudioData
+import io.uttermux.android.audio.PcmTransform
+import io.uttermux.android.diagnostics.Diagnostics
 import org.json.JSONObject
 import java.io.*
 import java.net.*
@@ -18,11 +20,19 @@ import java.util.concurrent.atomic.AtomicBoolean
 class KoReaderServerService : Service() {
     private var server: ServerSocket? = null
     private val pool = Executors.newCachedThreadPool()
-    private val cache = object : LinkedHashMap<String, Clip>(24, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Clip>?) = size > 20
+    private val cache = object : LinkedHashMap<String, StreamClip>(24, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, StreamClip>?):Boolean {
+            val remove=size>20;if(remove)eldest?.value?.cancelled?.set(true);return remove
+        }
     }
-    data class Clip(val audio: AudioData, @Volatile var startedAt: Long = 0, @Volatile var finished: Boolean = false) {
-        val duration get() = audio.pcm16.size / 2.0 / audio.sampleRate
+    data class StreamClip(
+        val queue:BlockingQueue<ByteArray> = LinkedBlockingQueue(64),
+        val cancelled:AtomicBoolean = AtomicBoolean(),
+        @Volatile var generatedFrames:Long=0,@Volatile var playedFrames:Long=0,
+        @Volatile var startedAt:Long=0,@Volatile var generationDone:Boolean=false,
+        @Volatile var playbackDone:Boolean=false,@Volatile var error:String="",
+    ) {
+        val queuedSeconds get()=(generatedFrames-playedFrames).coerceAtLeast(0)/24_000.0
     }
     override fun onCreate() {
         super.onCreate()
@@ -31,7 +41,9 @@ class KoReaderServerService : Service() {
         val pending = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         startForeground(5000, Notification.Builder(this, "koreader").setSmallIcon(android.R.drawable.ic_lock_silent_mode_off)
             .setContentTitle("UtterMux for KOReader").setContentText("Listening on localhost:5000").setContentIntent(pending).build())
-        server = ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress(InetAddress.getLoopbackAddress(), 5000)) }
+        // KOReader's compatibility plugin addresses the server as 127.0.0.1.
+        // InetAddress.getLoopbackAddress() resolves to ::1 on some Samsung builds.
+        server = ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 5000)) }
         pool.execute { acceptLoop() }
     }
     private fun acceptLoop() {
@@ -54,28 +66,46 @@ class KoReaderServerService : Service() {
                     // Route through automatic mode so the app-wide default and fallback chain
                     // take precedence over a stale provider voice saved by the KOReader plugin.
                     val key = digest("$text\u0000auto\u0000$speed\u0000$language")
-                    synchronized(cache) { if (!cache.containsKey(key)) cache[key] = Clip(UtterMuxApp.instance.router.synthesize("uttermux:auto", text, language, speed, AtomicBoolean())) }
+                    val clip=synchronized(cache){cache[key]?:StreamClip().also{cache[key]=it;generate(it,key,text,language,speed)}}
                     respond(output, 200, key)
                 }
                 method == "POST" && path == "/play" -> {
                     val clip = synchronized(cache) { cache[json.getString("handle")] } ?: error("Unknown handle")
-                    clip.startedAt = 0; clip.finished = false
+                    clip.startedAt=0;clip.playbackDone=false
                     pool.execute {
-                        try { Playback.play(clip.audio) { clip.startedAt = System.nanoTime() } }
-                        finally { clip.finished = true }
+                        try { Playback.playStream(24_000,UtterMuxApp.instance.settings.let{io.uttermux.android.audio.AdaptiveBufferController(it).startupMillis()},clip.cancelled,
+                            {timeout->clip.queue.poll(timeout,TimeUnit.MILLISECONDS)},{clip.generationDone},
+                            {clip.startedAt=System.nanoTime()},{frames->clip.playedFrames+=frames}) }
+                        finally { clip.playbackDone=true }
                     }
                     respond(output, 200, "")
                 }
-                method == "POST" && path == "/stop" -> { Playback.stop(); synchronized(cache) { cache[json.optString("handle")]?.apply { startedAt = 0; finished = true } }; respond(output, 200, "") }
+                method == "POST" && path == "/stop" -> { Playback.stop(); synchronized(cache) { cache[json.optString("handle")]?.apply { cancelled.set(true);startedAt=0;playbackDone=true } }; respond(output, 200, "") }
                 method == "POST" && path == "/remaining" -> {
                     val clip = synchronized(cache) { cache[json.getString("handle")] } ?: error("Unknown handle")
-                    val elapsed = if (clip.startedAt == 0L) 0.0 else (System.nanoTime() - clip.startedAt) / 1e9
-                    val remaining = if (clip.finished) 0.0 else (clip.duration - elapsed).coerceAtLeast(0.02)
-                    respond(output, 200, JSONObject().put("started", clip.startedAt != 0L).put("remaining", remaining).toString(), "application/json")
+                    val remaining=if(clip.playbackDone)0.0 else clip.queuedSeconds.coerceAtLeast(.02)
+                    respond(output,200,JSONObject().put("started",clip.startedAt!=0L).put("remaining",remaining)
+                        .put("buffered",clip.queuedSeconds).put("generating",!clip.generationDone).put("error",clip.error).toString(),"application/json")
                 }
+                method == "GET" && path == "/health" -> respond(output,200,JSONObject().put("ok",true).put("sessions",synchronized(cache){cache.size}).toString(),"application/json")
                 else -> respond(output, 404, "Not found")
             }
         } catch (error: Throwable) { runCatching { respond(BufferedOutputStream(it.getOutputStream()), 500, error.message ?: "Server error") } }
+    }
+    private fun generate(clip:StreamClip,key:String,text:String,language:String,speed:Float) {
+        pool.execute {
+            val diagnostic=Diagnostics.request("koreader $key chars=${text.length}")
+            try {
+                val route=UtterMuxApp.instance.router.prepare("uttermux:auto",text,language)
+                UtterMuxApp.instance.router.stream(route,text,speed,1f,clip.cancelled){chunk->
+                    val pcm=PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000)
+                    clip.generatedFrames+=pcm.size/2
+                    while(!clip.cancelled.get())if(clip.queue.offer(pcm,100,TimeUnit.MILLISECONDS))return@stream true
+                    false
+                }
+            } catch(error:Throwable){clip.error=error.message.orEmpty();Diagnostics.record(diagnostic,"error",clip.error)}
+            finally {clip.generationDone=true;clip.queue.offer(ByteArray(0));Diagnostics.record(diagnostic,"generated","frames=${clip.generatedFrames}")}
+        }
     }
     private fun voices(): String {
         val groups = JSONObject()
@@ -103,6 +133,6 @@ class KoReaderServerService : Service() {
         val data = body.toByteArray(); output.write("HTTP/1.1 $code ${if (code == 200) "OK" else "Error"}\r\nContent-Type: $type\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n".toByteArray()); output.write(data); output.flush()
     }
     private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(10).joinToString("") { "%02x".format(it) }
-    override fun onDestroy() { server?.close(); pool.shutdownNow(); Playback.stop(); super.onDestroy() }
+    override fun onDestroy() { server?.close();synchronized(cache){cache.values.forEach{it.cancelled.set(true)}};pool.shutdownNow(); Playback.stop(); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
 }

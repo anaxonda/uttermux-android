@@ -35,7 +35,11 @@ object HttpAudio {
     }
     fun postStream(url:String, body:JSONObject, headers:Map<String,String>, cancelled:AtomicBoolean,
                    emit:(ByteArray)->Boolean) {
-        val builder=Request.Builder().url(url).post(body.toString().toRequestBody(json));headers.forEach(builder::header)
+        postStreamRaw(url,body.toString().toByteArray(),"application/json",headers,cancelled,emit)
+    }
+    fun postStreamRaw(url:String,body:ByteArray,contentType:String,headers:Map<String,String>,cancelled:AtomicBoolean,
+                      emit:(ByteArray)->Boolean) {
+        val builder=Request.Builder().url(url).post(body.toRequestBody(contentType.toMediaType()));headers.forEach(builder::header)
         val call=client.newCall(builder.build());val finished=AtomicBoolean()
         Thread({
             while(!finished.get()&&!cancelled.get()) Thread.sleep(25)
@@ -56,6 +60,15 @@ object HttpAudio {
                 if(cancelled.get()) throw InterruptedException()
             }
         } finally { finished.set(true) }
+    }
+    fun postRaw(url:String,body:ByteArray,contentType:String,headers:Map<String,String>,cancelled:AtomicBoolean?=null):ByteArray {
+        val builder=Request.Builder().url(url).post(body.toRequestBody(contentType.toMediaType()));headers.forEach(builder::header)
+        val call=client.newCall(builder.build())
+        call.execute().use{response->
+            if(cancelled?.get()==true){call.cancel();throw InterruptedException()}
+            if(!response.isSuccessful)throw ProviderException(response.code,response.body.string().take(1000))
+            return response.body.bytes()
+        }
     }
     fun get(url: String, headers: Map<String, String> = emptyMap()): ByteArray {
         val builder = Request.Builder().url(url)

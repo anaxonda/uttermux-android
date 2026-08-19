@@ -8,8 +8,9 @@ import io.uttermux.android.config.AudioData
 import java.io.ByteArrayOutputStream
 
 object CompressedAudioDecoder {
-    fun mp3(context: Context, bytes: ByteArray): AudioData {
-        val file = kotlin.io.path.createTempFile(context.cacheDir.toPath(), "edge-", ".mp3").toFile()
+    fun mp3(context: Context, bytes: ByteArray): AudioData = decode(context,bytes,"mp3")
+    fun decode(context:Context,bytes:ByteArray,suffix:String="audio"):AudioData {
+        val file = kotlin.io.path.createTempFile(context.cacheDir.toPath(), "uttermux-", ".$suffix").toFile()
         try {
             file.writeBytes(bytes)
             val extractor = MediaExtractor()
