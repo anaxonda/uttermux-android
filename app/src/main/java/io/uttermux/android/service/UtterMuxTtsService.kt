@@ -13,7 +13,14 @@ class UtterMuxTtsService : TextToSpeechService() {
     private val router get() = UtterMuxApp.instance.router
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         val tag = Languages.fromAndroid(lang,country)
-        return if (router.voices.any { v -> v.languages.any { Languages.matches(it, tag) } }) TextToSpeech.LANG_COUNTRY_AVAILABLE else TextToSpeech.LANG_NOT_SUPPORTED
+        if (router.voices.none { v -> v.languages.any { Languages.matches(it, tag) } }) {
+            return TextToSpeech.LANG_NOT_SUPPORTED
+        }
+        return when {
+            !variant.isNullOrBlank() -> TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE
+            !country.isNullOrBlank() -> TextToSpeech.LANG_COUNTRY_AVAILABLE
+            else -> TextToSpeech.LANG_AVAILABLE
+        }
     }
     override fun onLoadLanguage(lang: String?, country: String?, variant: String?): Int = onIsLanguageAvailable(lang, country, variant)
     override fun onGetLanguage(): Array<String> = arrayOf("eng", "USA", "")
