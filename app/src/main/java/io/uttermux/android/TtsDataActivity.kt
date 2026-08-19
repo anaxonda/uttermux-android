@@ -21,7 +21,7 @@ class TtsDataActivity : Activity() {
         }
     }
     private fun checkData() {
-        val voices=UtterMuxApp.instance.router.voices.mapNotNull { voice ->
+        val voices=UtterMuxApp.instance.router.availableVoices.mapNotNull { voice ->
             runCatching {
                 val locale=voice.locale
                 listOf(locale.isO3Language,locale.isO3Country.takeIf(String::isNotBlank)).filterNotNull().joinToString("-")

@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class EdgeProvider(private val context: Context) : TtsProvider {
+    override val kind=ProviderKind.EDGE
     @Volatile private var catalog = listOf(
         VoiceRecord("edge/en-US-AriaNeural@en-US", "Aria · Edge", Locale.US, ProviderKind.EDGE, "Edge", setOf("en-US"), true),
         VoiceRecord("edge/fr-FR-DeniseNeural@fr-FR", "Denise · Edge", Locale.FRANCE, ProviderKind.EDGE, "Edge", setOf("fr-FR"), true),
@@ -39,6 +40,13 @@ class EdgeProvider(private val context: Context) : TtsProvider {
         if (found.isNotEmpty()) catalog = found
     }
     override fun synthesize(voice: VoiceRecord, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData {
+        return synthesizeWithPitch(voice,text,language,speed,1f,cancelled)
+    }
+    override fun stream(voice:VoiceRecord,text:String,language:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioData)->Boolean) {
+        // Pitch is applied uniformly to emitted PCM by the Android service.
+        emit(synthesizeWithPitch(voice,text,language,speed,1f,cancelled))
+    }
+    private fun synthesizeWithPitch(voice: VoiceRecord, text: String, language: String, speed: Float, pitch:Float, cancelled: AtomicBoolean): AudioData {
         val connectionId = UUID.randomUUID().toString().replace("-", "")
         val url = "$WSS&ConnectionId=$connectionId&Sec-MS-GEC=${gec()}&Sec-MS-GEC-Version=1-143.0.3650.75"
         val done = CountDownLatch(1); val audio = ByteArrayOutputStream(); val failure = AtomicReference<Throwable?>()
@@ -52,8 +60,9 @@ class EdgeProvider(private val context: Context) : TtsProvider {
                 ws.send("X-Timestamp:$timestamp\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n" +
                     "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n")
                 val rate = ((speed.coerceIn(.5f, 2f) - 1f) * 100).toInt().let { if (it >= 0) "+$it%" else "$it%" }
+                val pitchPercent=((pitch.coerceIn(.5f,2f)-1f)*100).toInt().let{if(it>=0)"+$it%" else "$it%"}
                 val name = voice.id.substringAfter('/').substringBefore('@')
-                val ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$language'><voice name='$name'><prosody pitch='+0Hz' rate='$rate' volume='+0%'>${TextUtils.htmlEncode(text)}</prosody></voice></speak>"
+                val ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$language'><voice name='$name'><prosody pitch='$pitchPercent' rate='$rate' volume='+0%'>${TextUtils.htmlEncode(text)}</prosody></voice></speak>"
                 ws.send("X-RequestId:${UUID.randomUUID().toString().replace("-", "")}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n$ssml")
             }
             override fun onMessage(ws: WebSocket, bytes: ByteString) {

@@ -10,6 +10,7 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SherpaProvider(context:Context, val manager:ModelManager=ModelManager(context)) : TtsProvider {
+    override val kind=ProviderKind.SHERPA
     private data class Spec(val voice:VoiceRecord,val model:String,val speaker:Int)
     private val specs=mutableListOf(
         Spec(VoiceRecord("sherpa/vits-inflect-en-nano-v2/default@en-US","Inflect Nano",Locale.US,ProviderKind.SHERPA,"VITS",setOf("en-US"),false),"vits-inflect-en-nano-v2",0),
@@ -38,6 +39,7 @@ class SherpaProvider(context:Context, val manager:ModelManager=ModelManager(cont
         }
     }
     override val voices get()=specs.map{it.voice}
+    override fun isAvailable(voice:VoiceRecord)=specs.firstOrNull{it.voice.id==voice.id}?.let{runCatching{manager.installed(it.model)}.getOrDefault(false)}==true
     private val engines=object:LinkedHashMap<String,OfflineTts>(3,.75f,true){ override fun removeEldestEntry(e:MutableMap.MutableEntry<String,OfflineTts>?):Boolean { val remove=size>2;if(remove)e?.value?.release();return remove } }
     override fun synthesize(voice:VoiceRecord,text:String,language:String,speed:Float,cancelled:AtomicBoolean):AudioData {
         val spec=specs.first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
@@ -46,6 +48,20 @@ class SherpaProvider(context:Context, val manager:ModelManager=ModelManager(cont
         val generated=tts.generateWithConfig(text,GenerationConfig(speed=speed,sid=spec.speaker))
         val bytes=ByteArray(generated.samples.size*2);generated.samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();bytes[i*2]=sample.toByte();bytes[i*2+1]=(sample shr 8).toByte()}
         return AudioData(generated.sampleRate,bytes)
+    }
+    override fun stream(voice:VoiceRecord,text:String,language:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioData)->Boolean) {
+        val spec=specs.first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
+        val tts=synchronized(engines){engines.getOrPut(spec.model){create(manager.model(spec.model),File(manager.root,spec.model))}}
+        var callbackUsed=false
+        val generated=tts.generateWithConfig(text,GenerationConfig(speed=speed,sid=spec.speaker)){samples->
+            callbackUsed=true
+            if(cancelled.get()||!emit(AudioData(tts.sampleRate(),pcm(samples)))) 0 else 1
+        }
+        if(cancelled.get())throw InterruptedException()
+        if(!callbackUsed)emit(AudioData(generated.sampleRate,pcm(generated.samples)))
+    }
+    private fun pcm(samples:FloatArray):ByteArray {
+        val bytes=ByteArray(samples.size*2);samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();bytes[i*2]=sample.toByte();bytes[i*2+1]=(sample shr 8).toByte()};return bytes
     }
     private fun create(model:LocalModel,root:File):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath

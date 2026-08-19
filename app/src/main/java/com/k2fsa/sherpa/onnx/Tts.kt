@@ -17,6 +17,7 @@ class OfflineTts(var config: OfflineTtsConfig) {
     private var ptr = newFromFile(config)
     fun sampleRate()=getSampleRate(ptr)
     fun generateWithConfig(text:String, config:GenerationConfig)=generateWithConfigImpl(ptr,text,config,null)
+    fun generateWithConfig(text:String,config:GenerationConfig,callback:(FloatArray)->Int)=generateWithConfigImpl(ptr,text,config,callback)
     fun release(){ if(ptr!=0L){ delete(ptr);ptr=0 } }
     private external fun newFromFile(config:OfflineTtsConfig):Long
     private external fun delete(ptr:Long)

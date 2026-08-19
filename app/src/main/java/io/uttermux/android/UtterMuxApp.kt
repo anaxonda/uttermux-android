@@ -2,6 +2,8 @@ package io.uttermux.android
 
 import android.app.Application
 import android.util.Log
+import android.content.Intent
+import android.speech.tts.TextToSpeech
 import io.uttermux.android.config.*
 import io.uttermux.android.provider.*
 import io.uttermux.android.router.VoiceRouter
@@ -22,6 +24,7 @@ class UtterMuxApp : Application() {
         runCatching { edge.refresh() }.onFailure { errors += "Edge: ${it.message}" }
         runCatching { elevenLabs.refresh() }.onFailure { errors += "ElevenLabs: ${it.message}" }
         Log.i("UtterMux", "catalog refresh: edge=${edge.voices.size} elevenlabs=${elevenLabs.voices.size} errors=${errors.joinToString()}")
+        sendBroadcast(Intent(TextToSpeech.Engine.ACTION_TTS_DATA_INSTALLED).setPackage(packageName))
         return errors
     }
     companion object { lateinit var instance: UtterMuxApp; private set }
