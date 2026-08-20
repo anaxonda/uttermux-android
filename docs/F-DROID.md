@@ -29,6 +29,10 @@ the repository binaries. This is a release blocker, not a scanner exception.
 - Reproduce the signed release from the tag and archive native-library hashes.
 - Update fastlane descriptions, screenshots, changelog, and privacy policy.
 
+GitHub release APKs are signed by the tag workflow using repository secrets.
+That signing key is for GitHub distribution only; F-Droid independently builds
+and signs its APK from source.
+
 The normal CI workflow verifies the checked-in development JNI hashes, builds
 the application, runs unit tests and lint, and rejects APKs containing model
 weights, voice recordings, credential directories, or obvious key patterns.

@@ -1,5 +1,7 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.plugin.compose") }
 
+val releaseKeystorePath=System.getenv("ANDROID_KEYSTORE_PATH")
+
 android {
     namespace = "io.uttermux.android"
     compileSdk = 36
@@ -14,6 +16,17 @@ android {
     }
     buildFeatures { compose = true; buildConfig = true }
     packaging { jniLibs.useLegacyPackaging = true }
+    if(!releaseKeystorePath.isNullOrBlank()){
+        signingConfigs {
+            create("release"){
+                storeFile=file(releaseKeystorePath)
+                storePassword=System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias=System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword=System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+        buildTypes.getByName("release").signingConfig=signingConfigs.getByName("release")
+    }
 }
 
 dependencies {
