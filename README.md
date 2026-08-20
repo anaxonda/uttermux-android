@@ -11,15 +11,17 @@ also implements the loopback protocol used by KOReader's `TTS.koplugin`.
 - Early `onStart`, adaptively reserved incremental PCM delivery, exact text
   ranges, cancellation, engine warming, segmented Piper synthesis, and bounded
   silence trimming.
-- A pre-indexed, debounced voice catalog with separate voice, language, and
-  engine/service searches; location, availability, performance, and gender
-  selectors; one-tap clearing; exact-voice previews;
+- A pre-indexed, debounced voice catalog with dependent voice-library and
+  model/version searches plus independent voice, language, and accent searches;
+  availability, location, capability, cost, performance, gender, size, and
+  speed controls; one-tap clearing; exact-voice previews;
   ordered BCP-47 fallback routes, model downloads, settings, and diagnostics.
 - Full Piper catalog (174 models and 2,707 speaker choices), all 53 Kokoro 1.0
-  speakers, all eight Kitten speakers, Inflect, Matcha, and Supertonic.
+  speakers, the 103-speaker Kokoro 1.1 FP32 option, all eight Kitten speakers,
+  Inflect, Matcha, and Supertonic.
   Kokoro and Kitten can be auditioned before downloading via Hayai's per-speaker
-  sample catalog. Pocket includes four explicitly licensed Kyutai reference
-  voices. MOSS Nano includes ten presets and optional INT8 and FP32 runtimes.
+  sample catalog. Pocket includes ten reference voices and can create private
+  profiles from imported audio or an eight-second microphone recording.
 - Edge, ElevenLabs, Grok/xAI, OpenAI-compatible, Azure, Qwen/DashScope,
   Deepgram, Cartesia, PlayHT, Resemble, Google Cloud, AWS Polly, and a constrained
   custom PCM provider. Google accepts a restricted API key or proxy. AWS accepts
@@ -69,27 +71,26 @@ fallbacks.
 Enable the compatibility server in UtterMux and install `TTS.koplugin` under
 `/sdcard/koreader/plugins/`. The server binds only IPv4 loopback at
 `127.0.0.1:5000` and implements `/voices`, `/`, `/play`, `/stop`, `/remaining`,
-and `/health`. Synthesis and playback are concurrent, so KOReader no longer
+`/pause`, `/resume`, and `/health`. Synthesis and playback are concurrent, so
+KOReader no longer
 waits for a complete passage before hearing audio.
 
 ## Model policy
 
 Only runnable voices appear in the voice catalog; research and compatibility
 notes are documentation, not dead UI rows. Local models are optional downloads.
-Pocket reuses one runtime/model with cached, per-voice licensed reference WAV
-files. Its 3/4/5-step quality selector trades generation latency for refinement;
-three steps is the measured low-latency default. MOSS-TTS-Nano is offered as a
-232 MB INT8 download and a roughly 685 MB official FP32 download. Both use a
-native-compatible SentencePiece implementation, semantic long-text chunks,
-incremental token generation, and a stateful streaming codec with mobile-sized
-adaptive batches. MOSS remains slower than real time on some older phones, so
-UtterMux grows its startup reserve to favor continuous output over mid-sentence
-dropouts.
+Pocket reuses one runtime/model with cached reference WAV files. Its 3/4/5-step
+quality selector trades generation latency for refinement; three steps is the
+measured low-latency default. Kokoro uses the supported FP32 graph: the available
+INT8 export is intentionally hidden because current ARM reports include rail-pinned
+audio, tones, and performance regressions. MOSS and ZipVoice are intentionally
+excluded from this release. MOSS did not meet sustained document-reading latency;
+ZipVoice requires a reference recording plus transcript and has no preset-voice
+catalog suitable for the current system-TTS UX.
 
 Qwen, Audio8, Chatterbox, NeuTTS, LEMAS, X-Voice, and OmniVoice are intentionally
 not advertised in the app until an arm64 runtime passes system-TTS, cancellation,
-memory, and sustained-speed acceptance tests. Voice-cloning import/recording UX
-is likewise deferred.
+memory, and sustained-speed acceptance tests.
 
 ## Cloud credentials and proxy contract
 
@@ -113,8 +114,8 @@ model for APIs implementing OpenAI's speech endpoint.
 ## Verification
 
 The release test suite covers exact segmentation/ranges, PCM conversion and
-silence trimming, adaptive buffering policy, routing, model management, MOSS
-tokenization, and system-TTS compatibility. On the development
+silence trimming, adaptive buffering policy, routing, model management, text
+normalization, unsafe-output rejection, and system-TTS compatibility. On the development
 Samsung SM-G970F, Alan Low produced first audio in about 2.1 seconds cold and
 0.33 seconds warm while completing through Android's system TTS callback.
 
@@ -125,10 +126,7 @@ in repeated short sections. Because readers
 such as Librera submit the next section only after the previous Android TTS
 request completes, that per-request generation time still becomes an audible
 section gap; UtterMux cannot pre-generate text the client has not supplied.
-The new MOSS INT8 path occupies 232 MB and produced first PCM in about 1.4
-seconds. Two sustained samples measured RTF 1.41–1.47, substantially better than
-FP32 but still slower than real time, so the adaptive reserve is necessary on
-this phone. A KOReader regression test now plays the same Pocket section twice
+A KOReader regression test now plays the same Pocket section twice
 and waits for AudioTrack's actual playback head, covering stale-stream reuse and
 clipped section tails. These tests are excluded from the ordinary suite because
 they consume substantial bandwidth, storage, and time.

@@ -43,12 +43,13 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
         require(prepared.isNotEmpty()){ "No voice is ready for $effectiveLanguage" }
         return RoutingSession(effectiveLanguage,prepared)
     }
-    fun stream(route:RoutingSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean) {
+    fun stream(route:RoutingSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,onCandidate:(VoiceRecord)->Unit={},emit:(AudioChunk)->Boolean) {
         var failure:Throwable?=null
         for(session in route.candidates) {
             if(cancelled.get()) throw InterruptedException()
             var emitted=false
             try {
+                onCandidate(session.voice)
                 providers.getValue(session.voice.provider).stream(session,text,speed,pitch,cancelled) { chunk -> emitted=true;emit(chunk) }
                 return
             } catch(error:Throwable) {
@@ -59,7 +60,7 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
         throw RuntimeException("No voice could synthesize ${route.language}",failure)
     }
     fun stream(requestedVoice:String?,text:String,language:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean)=
-        stream(prepare(requestedVoice,text,language),text,speed,pitch,cancelled,emit)
+        stream(prepare(requestedVoice,text,language),text,speed,pitch,cancelled,emit=emit)
     fun synthesize(requestedVoice:String?,text:String,language:String,speed:Float,cancelled:AtomicBoolean):AudioData {
         val output=ByteArrayOutputStream();val route=prepare(requestedVoice,text,language)
         stream(route,text,speed,1f,cancelled){chunk->output.write(PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000));true}

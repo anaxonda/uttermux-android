@@ -6,6 +6,7 @@ import io.uttermux.android.R
 import io.uttermux.android.audio.PcmTransform
 import io.uttermux.android.audio.CompressedAudioDecoder
 import io.uttermux.android.audio.TextSegmenter
+import io.uttermux.android.audio.AudioSafety
 import io.uttermux.android.config.*
 import org.json.JSONArray
 import java.io.File
@@ -20,6 +21,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     override val id=ProviderIds.SHERPA
     override val descriptor=ProviderDescriptor(id,"Local / sherpa-onnx",network=false)
     private data class Spec(val voice:VoiceRecord,val model:String,val speaker:Int,val referenceFile:String="")
+    private val pocketProfiles=PocketProfileStore(context)
     private val specs=mutableListOf(
         Spec(VoiceRecord("sherpa/vits-inflect-en-nano-v2/default@en-US","Inflect Nano",Locale.US,ProviderIds.SHERPA,"VITS",setOf("en-US"),false),"vits-inflect-en-nano-v2",0),
         Spec(VoiceRecord("sherpa/vits-inflect-en-micro-v2/default@en-US","Inflect Micro",Locale.US,ProviderIds.SHERPA,"VITS",setOf("en-US"),false,
@@ -60,6 +62,16 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
             specs+=Spec(VoiceRecord("sherpa/kokoro-multi-lang-v1_0/${key.replace('_','-')}@$locale","$display · Kokoro",Locale.forLanguageTag(locale),ProviderIds.SHERPA,"Kokoro 82M",setOf(locale),false,
                 "~350 MB package · $gender · Apache-2.0",preview,downloadId="kokoro-multi-lang-v1_0",approxSizeMb=350,license="Apache-2.0",gender=gender,quantization="FP32",estimatedRamMb=650,performanceClass="balanced"),"kokoro-multi-lang-v1_0",sid)
         }
+        val kokoro11Names=listOf("af_maple","af_sol","bf_vale")+
+            listOf("001","002","003","004","005","006","007","008","017","018","019","021","022","023","024","026","027","028","032","036","038","039","040","042","043","044","046","047","048","049","051","059","060","067","070","071","072","073","074","075","076","077","078","079","083","084","085","086","087","088","090","092","093","094","099").map{"zf_$it"}+
+            listOf("009","010","011","012","013","014","015","016","020","025","029","030","031","033","034","035","037","041","045","050","052","053","054","055","056","057","058","061","062","063","064","065","066","068","069","080","081","082","089","091","095","096","097","098","100").map{"zm_$it"}
+        kokoro11Names.forEachIndexed{sid,key->
+            val locale=when{key.startsWith("af_")->"en-US";key.startsWith("bf_")->"en-GB";else->"zh-CN"}
+            val gender=if(key[1]=='f')"female" else "male"
+            val display=when{key.startsWith("zf_")->"Chinese Female ${key.substringAfter('_')}";key.startsWith("zm_")->"Chinese Male ${key.substringAfter('_')}";else->key.substringAfter('_').replaceFirstChar(Char::uppercase)}
+            specs+=Spec(VoiceRecord("sherpa/kokoro-multi-lang-v1_1/${key.replace('_','-')}@$locale","$display · Kokoro v1.1",Locale.forLanguageTag(locale),ProviderIds.SHERPA,"Kokoro v1.1 FP32",setOf(locale),false,
+                "348 MB download · 103-speaker Chinese/English bundle · Apache-2.0",downloadId="kokoro-multi-lang-v1_1",approxSizeMb=348,license="Apache-2.0",gender=gender,quantization="FP32",estimatedRamMb=700,performanceClass="balanced",sourceUrl="https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html",library="Kokoro",modelVersion="v1.1 FP32"),"kokoro-multi-lang-v1_1",sid)
+        }
         listOf(
             Triple("alba-casual","Alba Casual","presets/alba-casual.wav"),Triple("alba-announcer","Alba Announcer","presets/alba-announcer.wav"),
             Triple("alba-merchant","Alba Merchant","presets/alba-merchant.wav"),Triple("alba-moment","Alba · A Moment By","presets/alba-moment.wav"),
@@ -67,6 +79,14 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
             val model="sherpa-onnx-pocket-tts-int8-2026-01-26"
             specs+=Spec(VoiceRecord("sherpa/$model/$key@en-US","$name · Pocket",Locale.US,ProviderIds.SHERPA,"Pocket TTS INT8",setOf("en-US"),false,
                 "~176 MB · licensed preset · CC BY 4.0",downloadId=model,approxSizeMb=176,license="CC BY 4.0",gender="female",quantization="INT8",estimatedRamMb=420,performanceClass="balanced",attribution="Voice performed by Alba MacKenna; source: Kyutai tts-voices"),model,0,file)
+        }
+        listOf(
+            arrayOf("mary","Mary","presets/mary.wav","female"),arrayOf("michael","Michael","presets/michael.wav","male"),
+            arrayOf("paul","Paul","presets/paul.wav","male"),arrayOf("peter-yearsley","Peter Yearsley","presets/peter-yearsley.wav","male"),
+            arrayOf("stuart-bell","Stuart Bell","presets/stuart-bell.wav","male"),arrayOf("vera","Vera","presets/vera.wav","female"),
+        ).forEach{item->val(key,name,file,gender)=item;val model="sherpa-onnx-pocket-tts-int8-2026-01-26"
+            specs+=Spec(VoiceRecord("sherpa/$model/$key@en-US","$name · Pocket",Locale.US,ProviderIds.SHERPA,"Pocket TTS INT8",setOf("en-US"),false,
+                "176 MB · official reference preset",downloadId=model,approxSizeMb=176,license="Model Apache-2.0; reference-specific terms",gender=gender,quantization="INT8",estimatedRamMb=420,performanceClass="balanced",capabilities=setOf("voice-cloning"),sourceUrl="https://github.com/kyutai-labs/pocket-tts",library="Pocket",modelVersion="2026-01 INT8"),model,0,file)
         }
         val supertonicModel="sherpa-onnx-supertonic-3-tts-int8-2026-05-11"
         val supertonicSampleGroups=listOf(0,3,3,0,3,0,0,3,2,1)
@@ -96,9 +116,14 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
             }
         }
     }
-    override val voices get()=specs.map{it.voice}
-    override val availableVoices get()=manager.installedIds().let{installed->specs.filter{it.model in installed}.map{it.voice}}
-    override fun isAvailable(voice:VoiceRecord)=specs.firstOrNull{it.voice.id==voice.id}?.let{runCatching{manager.installed(it.model)}.getOrDefault(false)}==true
+    private fun allSpecs():List<Spec> = specs+pocketProfiles.profiles().map{profile->
+        val model="sherpa-onnx-pocket-tts-int8-2026-01-26"
+        Spec(VoiceRecord("sherpa/$model/custom-${profile.id}@${profile.language}","${profile.name} · Pocket",Locale.forLanguageTag(profile.language),ProviderIds.SHERPA,"Pocket TTS INT8",setOf(profile.language),false,
+            "User-created local voice profile",downloadId=model,approxSizeMb=176,license="Private reference recording",quantization="INT8",estimatedRamMb=420,performanceClass="balanced",capabilities=setOf("voice-cloning"),library="Pocket",modelVersion="2026-01 INT8"),model,0,profile.file)
+    }
+    override val voices get()=allSpecs().map{it.voice}
+    override val availableVoices get()=manager.installedIds().let{installed->allSpecs().filter{it.model in installed}.map{it.voice}}
+    override fun isAvailable(voice:VoiceRecord)=allSpecs().firstOrNull{it.voice.id==voice.id}?.let{runCatching{manager.installed(it.model)}.getOrDefault(false)}==true
     private val runtimeLock=Any()
     private val warmedReferences=mutableSetOf<String>()
     private val engines=object:LinkedHashMap<String,OfflineTts>(3,.75f,true){
@@ -115,10 +140,10 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     private val references=mutableMapOf<String,Reference>()
     private fun engineKey(spec:Spec)="${spec.model}@${spec.voice.locale.toLanguageTag()}"
     private fun engine(spec:Spec):OfflineTts=synchronized(engines){engines.getOrPut(engineKey(spec)){create(manager.model(spec.model),File(manager.root,spec.model),spec.voice.locale.toLanguageTag())}}
-    override fun strategy(voice:VoiceRecord):StreamStrategy=specs.firstOrNull{it.voice.id==voice.id}?.let{manager.model(it.model).engine}
+    override fun strategy(voice:VoiceRecord):StreamStrategy=allSpecs().firstOrNull{it.voice.id==voice.id}?.let{manager.model(it.model).engine}
         .let{if(it=="pocket"||it=="zipvoice")StreamStrategy.CODEC_ADAPTIVE else StreamStrategy.SEGMENTED_LOCAL}
     override fun warm(voice:VoiceRecord){
-        val spec=specs.firstOrNull{it.voice.id==voice.id}?.takeIf{manager.installed(it.model)}?:return
+        val spec=allSpecs().firstOrNull{it.voice.id==voice.id}?.takeIf{manager.installed(it.model)}?:return
         synchronized(runtimeLock){
             val tts=engine(spec)
             if(manager.model(spec.model).engine!="pocket"||spec.referenceFile.isBlank())return@synchronized
@@ -135,7 +160,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         }
     }
     override fun synthesize(voice:VoiceRecord,text:String,language:String,speed:Float,cancelled:AtomicBoolean):AudioData {
-        val spec=specs.first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
+        val spec=allSpecs().first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
         if(cancelled.get())throw InterruptedException()
         val generated=synchronized(runtimeLock){engine(spec).generateWithConfig(text,generationConfig(spec,speed))}
         val bytes=ByteArray(generated.samples.size*2);generated.samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();bytes[i*2]=sample.toByte();bytes[i*2+1]=(sample shr 8).toByte()}
@@ -143,7 +168,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     }
     override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean) {
         val voice=session.voice
-        val spec=specs.first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
+        val spec=allSpecs().first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
         var sequence=0
         synchronized(runtimeLock){val tts=engine(spec);for(segment in TextSegmenter.split(text)) {
             if(cancelled.get())throw InterruptedException()
@@ -164,12 +189,14 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         }}
     }
     private fun pcm(samples:FloatArray):ByteArray {
+        AudioSafety.requireSafe(samples,24_000)
         val bytes=ByteArray(samples.size*2);samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();bytes[i*2]=sample.toByte();bytes[i*2+1]=(sample shr 8).toByte()};return bytes
     }
+    override fun trimMemory(){synchronized(runtimeLock){synchronized(engines){engines.values.forEach(OfflineTts::release);engines.clear()};synchronized(references){references.clear()};synchronized(warmedReferences){warmedReferences.clear()}}}
     private fun generationConfig(spec:Spec,speed:Float):GenerationConfig {
         if(spec.referenceFile.isBlank())return GenerationConfig(speed=speed,sid=spec.speaker)
         val reference=synchronized(references){references.getOrPut("${spec.model}/${spec.referenceFile}"){
-            val file=File(File(manager.root,spec.model),spec.referenceFile);require(file.isFile){"Pocket preset audio is missing; reinstall the model"}
+            val requested=File(spec.referenceFile);val file=if(requested.isAbsolute)requested else File(File(manager.root,spec.model),spec.referenceFile);require(file.isFile){"Pocket reference audio is missing; reinstall the model or recreate the profile"}
             val audio=CompressedAudioDecoder.decode(context,file.readBytes(),"wav")
             Reference(FloatArray(audio.pcm16.size/2){i->
                 val lo=audio.pcm16[i*2].toInt() and 255;val hi=audio.pcm16[i*2+1].toInt();((hi shl 8 or lo).toShort()/32768f)

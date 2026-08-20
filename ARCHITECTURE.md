@@ -24,8 +24,7 @@ metered behavior, credentials, capabilities, and streaming strategy.
 
 Local engines are cached in a configurable LRU. Piper/VITS text is segmented
 without losing characters or offsets. Sherpa callback-capable families stream
-their inference output directly. MOSS runs token generation and codec decoding
-as separate producers and emits only newly decoded PCM. Model downloads run through WorkManager with
+their inference output directly. Model downloads run through WorkManager with
 network/storage constraints, HTTP resume, cancellation, SHA-256 checks, safe
 extraction, and atomic publication.
 
@@ -33,7 +32,8 @@ KOReader receives a handle immediately after creating a synthesis session.
 Generation fills a queue bounded by PCM duration while `/play` drains it through
 an adaptive buffer. The reserve is continuously recalculated from generation
 time, emitted audio duration, and actual underruns; controllers survive across
-utterances for the same voice. `/remaining` reports generation, buffered
+utterances for the same voice. Pause preserves the same AudioTrack and queue;
+stop is terminal. `/remaining` reports generation, buffered
 duration, playback, and errors independently.
 
 The UI has two destinations: Voices and Settings. Provider credentials, routes,

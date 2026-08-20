@@ -1,0 +1,72 @@
+--- a/TTS.koplugin/main.lua
++++ b/TTS.koplugin/main.lua
+@@ -454,7 +454,7 @@
+ 						end,
+ 						callback = function()
+ 							if self.playing_promise ~= nil then
+-								self:stop_playing()
++								self:stop_playing(true)
+ 							else
+ 								self:start_playing()
+ 							end
+@@ -862,31 +862,10 @@
+ 	text = text:gsub("‘", "'"):gsub("’", "'")
+ 	text = text:gsub("…", "...")
+ 	text = text:gsub("–", "-"):gsub("—", "-")
+-	text = text:gsub("\128", " EUR ")
+-	text = text:gsub("\130", ",")
+-	text = text:gsub("\131", "f")
+-	text = text:gsub("\132", '"')
+-	text = text:gsub("\133", "...")
+-	text = text:gsub("\136", "^")
+-	text = text:gsub("\137", " per mille ")
+-	text = text:gsub("\138", "S")
+-	text = text:gsub("\139", "<")
+-	text = text:gsub("\140", "OE")
+-	text = text:gsub("\142", "Z")
+-	text = text:gsub("\145", "'")
+-	text = text:gsub("\146", "'")
+-	text = text:gsub("\147", '"')
+-	text = text:gsub("\148", '"')
+-	text = text:gsub("\149", "-")
+-	text = text:gsub("\150", "-")
+-	text = text:gsub("\151", "-")
+-	text = text:gsub("\152", "~")
+-	text = text:gsub("\153", " TM ")
+-	text = text:gsub("\154", "s")
+-	text = text:gsub("\155", ">")
+-	text = text:gsub("\156", "oe")
+-	text = text:gsub("\158", "z")
+-	text = text:gsub("\159", "Y")
++	-- Never rewrite individual bytes here: UTF-8 punctuation contains many of
++	-- these byte values. In particular, 0x99 occurs in U+2019 and used to make
++	-- ordinary curly apostrophes sound like "TM". Only replace complete Unicode
++	-- characters above; the UtterMux server performs the final normalization.
+ 	text = text:gsub("%s+", " ")
+ 	return text
+ end
+@@ -1094,10 +1073,11 @@
+ 		if unschedule_remaining ~= nil then
+ 			unschedule_remaining()
+ 		end
++		local endpoint = playback_promise.pause_requested and "/pause" or "/stop"
+ 		ffiutil.runInSubProcess(function()
+-			local code2, _ = self:request_server(body, "/stop")
++			local code2, _ = self:request_server(body, endpoint)
+ 			if code2 ~= 200 then
+-				logger.err("TTS: could not stop playback. Is the TTS server down?")
++				logger.err("TTS: could not change playback state. Is the TTS server down?")
+ 			end
+ 		end)
+ 	end
+@@ -1153,8 +1133,9 @@
+ 	return item.handle_promise
+ end
+ 
+-function TTS:stop_playing()
++function TTS:stop_playing(pause)
+ 	if self.playing_promise ~= nil then
++		self.playing_promise.pause_requested = pause == true
+ 		self.playing_promise:cancel()
+ 		self.playing_promise = nil
+ 	end

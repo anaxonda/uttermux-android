@@ -21,8 +21,8 @@ class VoiceDiscoveryTest {
             VoiceDiscovery.index(voice(ProviderIds.SHERPA,"Kokoro 82M","fr-FR",false,"female","balanced"),true,"Local / sherpa-onnx"),
             VoiceDiscovery.index(voice("edge","Edge Neural","fr-FR",true,"male","cloud"),true,"Edge"),
         )
-        val shown=VoiceDiscovery.filter(entries,VoiceFilters(language="French",service="kokoro",locality="on-device",gender="female"))
-        assertEquals(1,shown.size);assertEquals("Kokoro",shown.single().service)
-        assertTrue(VoiceDiscovery.filter(entries,VoiceFilters(service="edge",locality="on-device")).isEmpty())
+        val shown=VoiceDiscovery.filter(entries,VoiceFilters(language="French",library="kokoro",locality="on-device",gender="female"))
+        assertEquals(1,shown.size);assertEquals("Kokoro",shown.single().library)
+        assertTrue(VoiceDiscovery.filter(entries,VoiceFilters(library="edge",locality="on-device")).isEmpty())
     }
 }

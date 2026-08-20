@@ -10,13 +10,17 @@ import java.security.MessageDigest
 
 data class RemoteAsset(val file:String,val url:String,val sha256:String)
 data class LocalModel(val id:String,val engine:String,val url:String,val sha256:String,val model:String,val tokens:String="tokens.txt",val voices:String="",val dataDir:String="espeak-ng-data",val lexicon:String="",
-    val secondaryUrl:String="",val secondarySha256:String="",val secondaryFile:String="",val assets:List<RemoteAsset> = emptyList())
+    val secondaryUrl:String="",val secondarySha256:String="",val secondaryFile:String="",val assets:List<RemoteAsset> = emptyList(),
+    val title:String=id,val family:String=engine,val downloadSizeMb:Int=0,val estimatedRamMb:Int=0,val quantization:String="",val performanceClass:String="unknown",
+    val languages:Set<String> = emptySet(),val license:String="",val sourceUrl:String="")
 
 class ModelManager(private val context: Context) {
     private val modelsById = linkedMapOf<String,LocalModel>()
     val models: List<LocalModel> get() = synchronized(modelsById) { modelsById.values.toList() }
     init { listOf(
         LocalModel("kokoro-multi-lang-v1_0","kokoro","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2","c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046","model.onnx",voices="voices.bin",lexicon="lexicon-us-en.txt"),
+        LocalModel("kokoro-multi-lang-v1_1","kokoro","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_1.tar.bz2","a3f4c73d043860e3fd2e5b06f36795eb81de0fc8e8de6df703245edddd87dbad","model.onnx",voices="voices.bin",lexicon="lexicon-us-en.txt",
+            title="Kokoro multilingual v1.1 FP32",family="Kokoro",downloadSizeMb=348,estimatedRamMb=700,quantization="FP32",performanceClass="balanced",languages=setOf("en-US","en-GB","zh-CN"),license="Apache-2.0",sourceUrl="https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html"),
         LocalModel("kitten-nano-en-v0_8-int8","kitten","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kitten-nano-en-v0_8-int8.tar.bz2","6fa5be852612ce761094ba74ee6123b4fc4acfefa79bf64dc63acae4a83af2fd","model.int8.onnx",voices="voices.bin"),
         LocalModel("kitten-nano-en-v0_1-fp16","kitten","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kitten-nano-en-v0_1-fp16.tar.bz2","f35dac93754fe2ac97c66e1f468311d0d2130f7f0f5a89bfa1197e09a0cbdec5","model.fp16.onnx",voices="voices.bin"),
         LocalModel("vits-piper-en_US-lessac-medium","vits","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-medium.tar.bz2","9e3febfacf0abf4270172d2958bcec246032b7e88efc2720840cc80c93de334e","en_US-lessac-medium.onnx"),
@@ -29,8 +33,13 @@ class ModelManager(private val context: Context) {
             RemoteAsset("presets/alba-announcer.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/alba-mackenna/announcer.wav","e8b55193435db043833dda62fb759ee2779ace195811340ee8d28c7c4a4ccc24"),
             RemoteAsset("presets/alba-merchant.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/alba-mackenna/merchant.wav","52c24756de299b37998ed83e32fdc8747f874f9dd67f0bcdc38b96d3f70cf488"),
             RemoteAsset("presets/alba-moment.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/alba-mackenna/a-moment-by.wav","a1805f0e3610f0d5985f4abb51979620a012899e810019960310944bbcba509d"),
+            RemoteAsset("presets/mary.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/vctk/p333_023_enhanced.wav","a35b0468382218e9f37a9a7494d1e4b74deaf18d7ced22265b4e325bb55c183f"),
+            RemoteAsset("presets/michael.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/vctk/p360_023_enhanced.wav","b6743e9195e5e3fd34fe9d1633ae93f7ffab787b249e45f6467d7d6f7a6ee6ad"),
+            RemoteAsset("presets/paul.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/vctk/p259_023_enhanced.wav","7aba504fe0b3b16478b69eb27ce6007e3cb42b0c1915b5f1c6a6024ae37d679b"),
+            RemoteAsset("presets/peter-yearsley.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/voice-zero/peter_yearsley.wav","fbb3920fda7ae26a5a8b317ffcae1d55c0bd5d89d075205f5a52b1e924b83f51"),
+            RemoteAsset("presets/stuart-bell.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/voice-zero/stuart_bell.wav","00c7baeb2fb7a8c1c6198e045b5e853a7ccc04002a51a09b4be3dd7c96994f73"),
+            RemoteAsset("presets/vera.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/vctk/p229_023_enhanced.wav","309cf91a895830f15842b398f69a4962cb1f7e0bfab10e25dd27838e826c204b"),
         )),
-        LocalModel("sherpa-onnx-zipvoice-distill-int8-zh-en-emilia","zipvoice","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-zipvoice-distill-int8-zh-en-emilia.tar.bz2","77219c8b40f4ee8d73a7f902305ff6c1128ef9b54461c41b4ca6ed890b6c2803","encoder.int8.onnx"),
         LocalModel("moss-tts-nano-100m-onnx","moss","","","MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx",assets=listOf(
             RemoteAsset("MOSS-TTS-Nano-100M-ONNX/browser_poc_manifest.json","https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main/browser_poc_manifest.json","097d80e993dc29f0bae427590b4f77084a161cb578b50d82c29f455d5faa9eee"),
             RemoteAsset("MOSS-TTS-Nano-100M-ONNX/tts_browser_onnx_meta.json","https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main/tts_browser_onnx_meta.json","3edf25232dcd0af3d061c837e9a968a39e2f8592e06777d740503c4f2244f95c"),

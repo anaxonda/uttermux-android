@@ -20,6 +20,7 @@ interface TtsProvider {
     fun strategy(voice:VoiceRecord)=if(voice.networkRequired)StreamStrategy.DIRECT_STREAM else StreamStrategy.SEGMENTED_LOCAL
     fun prepare(voice:VoiceRecord,language:String)=PreparedSession(voice,language,strategy=strategy(voice))
     fun warm(voice:VoiceRecord) {}
+    fun trimMemory() {}
     fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean)
     fun synthesize(voice: VoiceRecord, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData {
         val output=ByteArrayOutputStream();var rate=24_000;var sequence=0

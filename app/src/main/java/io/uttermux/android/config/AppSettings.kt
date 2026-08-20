@@ -1,6 +1,7 @@
 package io.uttermux.android.config
 
 import android.content.Context
+import android.content.SharedPreferences
 
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -25,6 +26,9 @@ class AppSettings(context: Context) {
     var pocketNumSteps:Int
         get()=prefs.getInt("pocket_num_steps_v2",3)
         set(value){prefs.edit().putInt("pocket_num_steps_v2",value.coerceIn(3,5)).apply()}
+    var paidPreviewConfirmed:Boolean
+        get()=prefs.getBoolean("paid_preview_confirmed",false)
+        set(value){prefs.edit().putBoolean("paid_preview_confirmed",value).apply()}
     fun route(language: String): String = prefs.getString("route.${Languages.normalized(language)}", "")!!
     fun setRoute(language: String, voice: String) = prefs.edit().putString("route.${Languages.normalized(language)}", voice).apply()
     fun routeChain(language:String):List<String> = prefs.getString("route_chain.${Languages.normalized(language)}","")!!.split('\n').filter(String::isNotBlank)
@@ -33,4 +37,9 @@ class AppSettings(context: Context) {
         .filter { it.key.startsWith("route.") || it.key.startsWith("route_chain.") }
         .flatMap { it.value.toString().split('\n').asSequence() }
         .filter(String::isNotBlank).distinct().toList()
+    fun registerChangeListener(listener:(String)->Unit):SharedPreferences.OnSharedPreferenceChangeListener {
+        val wrapped=SharedPreferences.OnSharedPreferenceChangeListener{_,key->if(key!=null)listener(key)}
+        prefs.registerOnSharedPreferenceChangeListener(wrapped)
+        return wrapped
+    }
 }

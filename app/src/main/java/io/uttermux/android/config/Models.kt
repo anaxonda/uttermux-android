@@ -79,6 +79,10 @@ data class VoiceRecord(
     val estimatedRamMb:Int = 0,
     val performanceClass:String = "unknown",
     val attribution:String = "",
+    val sourceUrl:String = "",
+    val library:String = "",
+    val modelVersion:String = "",
+    val costClass:String = "free",
 )
 
 data class AudioData(val sampleRate: Int, val pcm16: ByteArray)

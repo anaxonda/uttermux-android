@@ -33,34 +33,17 @@ class LargeModelIntegrationTest {
         verify("Pocket",audio,began)
     }
 
-    @Test fun mossDownloadAndExactVoiceSynthesis(){
-        val id="moss-tts-nano-100m-onnx-int8"
-        install(id)
-        val voice=app.router.voices.first{it.provider=="moss"&&it.downloadId==id&&it.name.startsWith("Ava")}
-        val began=android.os.SystemClock.elapsedRealtime()
-        val audio=app.router.synthesizeExact(voice.id,"MOSS is speaking on this Android phone.","en-US",1f,AtomicBoolean())
-        verify("MOSS",audio,began)
+    @Test fun kokoroFp32DownloadAndExactVoiceSynthesis(){
+        val id="kokoro-multi-lang-v1_1";install(id)
+        val voice=app.router.voices.first{it.downloadId==id&&it.locale.toLanguageTag()=="en-US"}
+        val began=android.os.SystemClock.elapsedRealtime();val audio=app.router.synthesizeExact(voice.id,"Kokoro is speaking through the supported full precision model.","en-US",1f,AtomicBoolean())
+        verify("Kokoro FP32",audio,began)
     }
 
-    @Test fun installedPocketAndMossCompleteThroughAndroidSystemApi(){
-        listOf(
-            app.router.voices.first{it.model=="Pocket TTS INT8"},
-            app.router.voices.first{it.provider=="moss"&&it.downloadId=="moss-tts-nano-100m-onnx-int8"&&it.name.startsWith("Ava")},
-        ).forEach(::speakThroughAndroid)
-    }
-
-    @Test fun mossInt8SequentialStreamBenchmark(){
-        val id="moss-tts-nano-100m-onnx-int8";install(id)
-        val voice=app.router.voices.first{it.provider=="moss"&&it.downloadId==id&&it.name.startsWith("Ava")}
-        val provider=app.providers.first{it.id==voice.provider};provider.warm(voice)
-        repeat(2){index->
-            val began=android.os.SystemClock.elapsedRealtime();var firstAt=0L;var audioMs=0L;var generatedMs=0L;var chunks=0
-            provider.stream(provider.prepare(voice,"en-US"),"Section ${index+1}. This benchmark measures whether quantized MOSS can sustain continuous document reading.",1f,1f,AtomicBoolean()){chunk->
-                if(firstAt==0L)firstAt=android.os.SystemClock.elapsedRealtime();audioMs+=chunk.pcm16.size/2L*1000/chunk.sampleRate;generatedMs+=chunk.generatedNanos/1_000_000;chunks++;true
-            }
-            val elapsed=android.os.SystemClock.elapsedRealtime()-began;assertTrue(audioMs>500)
-            Log.i("UtterMuxLargeTest","MOSS INT8 request=${index+1}: first PCM ${firstAt-began}ms, complete ${elapsed}ms, audio=${audioMs}ms, callback-generation=${generatedMs}ms, chunks=$chunks, RTF=${"%.2f".format(elapsed/audioMs.toDouble())}")
-        }
+    @Test fun kittenDownloadAndExactVoiceSynthesis(){
+        val id="kitten-nano-en-v0_8-int8";install(id)
+        val voice=app.router.voices.first{it.downloadId==id};val began=android.os.SystemClock.elapsedRealtime()
+        verify("Kitten INT8",app.router.synthesizeExact(voice.id,"Kitten is restored and ready for Android applications.","en-US",1f,AtomicBoolean()),began)
     }
 
     @Test fun pocketQualityAndWarmRequestBenchmark(){
