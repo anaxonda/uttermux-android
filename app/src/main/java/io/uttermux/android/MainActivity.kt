@@ -80,7 +80,7 @@ private enum class Page(val label:String){VOICES("Voices"),ROUTES("Routes"),MODE
             AssistChip(onClick={},label={Text(when{installed->"Ready";voice.downloadable&&localId.isNotBlank()->"Installable";voice.status!="available"->voice.status;else->"Preview only"})})
             if(voice.experimental)AssistChip(onClick={},label={Text("Experimental")})
             if(localId.isNotBlank()&&!installed&&voice.downloadable)TextButton(onClick={scope.launch{onStatus("Downloading $localId…");runCatching{withContext(Dispatchers.IO){app.models.install(localId)}}.onSuccess{installed=true;onStatus("Installed $localId");onChanged()}.onFailure{onStatus("Install failed: ${it.message}")}}}){Text("Download")}
-            TextButton(enabled=installed||voice.previewUrl.isNotBlank()||(voice.networkRequired&&app.router.availableVoices.any{it.id==voice.id}),onClick={scope.launch{onStatus("Previewing ${voice.name}…");runCatching{withContext(Dispatchers.IO){
+            TextButton(onClick={scope.launch{onStatus("Previewing ${voice.name}…");runCatching{withContext(Dispatchers.IO){
                 val audio=if(voice.previewUrl.isNotBlank()&&!installed)CompressedAudioDecoder.decode(app,HttpAudio.get(voice.previewUrl),voice.previewUrl.substringAfterLast('.',"audio"))else app.router.synthesizeExact(voice.id,previewText(voice.locale.language),voice.locale.toLanguageTag(),1f,AtomicBoolean());Playback.play(audio)
             }}.onSuccess{onStatus("Previewed ${voice.name}")}.onFailure{onStatus("Preview unavailable: ${it.message}")}}}){Text("Preview")}
         }
