@@ -1,0 +1,5 @@
+First public beta of the UtterMux Android system TTS engine.
+
+Includes optional offline voices, online providers, voice search and previews,
+automatic language routing, Pocket voice profiles, adaptive streaming, and
+KOReader compatibility. No voice model is bundled.

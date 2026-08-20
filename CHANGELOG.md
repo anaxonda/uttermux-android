@@ -1,14 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.4.0-beta.1 - Unreleased
 
-- Fix zero-reserve preview playback for local and downloaded-sample voices.
-- Add global preview cancellation and visible loading/playing/error state.
-- Add a Create workspace for Pocket reference recording, import, previews, and
-  versioned private voice profiles.
-- Preserve voice filters and list position across in-app navigation.
-- Make searchable filters list-first so the keyboard opens only on demand.
-- Replace the online-provider picker with individually expandable provider
-  cards and move playback tuning into an explained Advanced section.
-- Add complete installed-model metadata, cross-platform catalog schema, public
-  model/benchmark documentation, privacy policy, and F-Droid release notes.
+First public Android beta.
+
+- Android system TTS integration tested with Feeder, Librera, and KOReader.
+- Optional Piper/VITS, Inflect, Kitten, Kokoro, Matcha, Supertonic, and Pocket
+  voices; no model is bundled.
+- Searchable voice catalog, exact previews, automatic language routing,
+  hardware guidance, and adaptive PCM streaming.
+- Pocket local voice profiles and optional online voice providers.
+- Encrypted credentials, redacted diagnostics, checksum-verified downloads,
+  dark theme, and Android selection-menu playback.
+
+Known limitations:
+
+- The APK supports arm64-v8a devices only.
+- Kokoro FP32 is slower than real time on the Galaxy S10 reference device.
+- Pocket section continuity depends partly on how the reader submits requests.
+- Some online provider integrations remain experimental.

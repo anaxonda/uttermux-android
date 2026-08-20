@@ -38,8 +38,8 @@ import kotlinx.coroutines.withContext
 class MainActivity:ComponentActivity(){
     private val notifications=registerForActivityResult(ActivityResultContracts.RequestPermission()){}
     override fun onCreate(savedInstanceState:android.os.Bundle?){super.onCreate(savedInstanceState)
-        if(android.os.Build.VERSION.SDK_INT>=33)notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         val app=UtterMuxApp.instance;if(intent.getBooleanExtra("enable_koreader",false))app.settings.koReaderEnabled=true
+        if(android.os.Build.VERSION.SDK_INT>=33&&app.settings.koReaderEnabled)notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         if(app.settings.koReaderEnabled)startForegroundService(Intent(this,KoReaderServerService::class.java))
         setContent{var theme by remember{mutableStateOf(app.settings.theme)};val dark=when(theme){"dark"->true;"light"->false;else->androidx.compose.foundation.isSystemInDarkTheme()}
             MaterialTheme(colorScheme=if(dark)darkColorScheme()else lightColorScheme()){UtterMuxManager(theme){app.settings.theme=it;theme=it}}}

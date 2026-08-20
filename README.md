@@ -1,5 +1,7 @@
 # UtterMux for Android
 
+[![Android CI](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml/badge.svg)](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml)
+
 UtterMux is an Android system text-to-speech engine and voice manager. It gives
 Android readers one interface for local ONNX models and online providers, and
 also implements the loopback protocol used by KOReader's `TTS.koplugin`.
