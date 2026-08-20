@@ -35,9 +35,11 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
             Triple("expr-voice-4-m","Hugo","male"),Triple("expr-voice-4-f","Rosie","female"),
             Triple("expr-voice-5-m","Leo","male"),Triple("expr-voice-5-f","Kiki","female"),
         )
+        val kittenSampleGroups=listOf(0,3,3,0,3,0,0,3)
         kittenVoices.forEachIndexed{sid,(key,name,gender)->
+            val preview="https://github.com/HayaiApp/HayaiTTS-samples/releases/download/samples-${kittenSampleGroups[sid]}/kitten-nano-en-v0_8-int8__sid${sid}__en-US.mp3"
             specs+=Spec(VoiceRecord("sherpa/kitten-nano-en-v0_8-int8/$key@en-US","$name · Kitten Nano",Locale.US,ProviderIds.SHERPA,"Kitten Nano 0.8 INT8",setOf("en-US"),false,
-                "~31 MB · tiny CPU model · Apache-2.0",downloadId="kitten-nano-en-v0_8-int8",approxSizeMb=31,license="Apache-2.0",gender=gender,quantization="INT8",estimatedRamMb=120,performanceClass="fast"),"kitten-nano-en-v0_8-int8",sid)
+                "~31 MB · tiny CPU model · Apache-2.0",preview,downloadId="kitten-nano-en-v0_8-int8",approxSizeMb=31,license="Apache-2.0",gender=gender,quantization="INT8",estimatedRamMb=120,performanceClass="fast"),"kitten-nano-en-v0_8-int8",sid)
         }
         val kokoroNames=listOf(
             "af_alloy","af_aoede","af_bella","af_heart","af_jessica","af_kore","af_nicole","af_nova","af_river","af_sarah","af_sky",
@@ -47,12 +49,16 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
             "jf_alpha","jf_gongitsune","jf_nezumi","jf_tebukuro","jm_kumo","pf_dora","pm_alex","pm_santa",
             "zf_xiaobei","zf_xiaoni","zf_xiaoxiao","zf_xiaoyi","zm_yunjian","zm_yunxi","zm_yunxia","zm_yunyang",
         )
+        val kokoroEnglishSampleGroups=listOf(3,0,0,3,0,3,3,0,1,2,2,1,1,2,1,2,2,1,0,3,0,3,3,0,3,0,0,3,2,1,1,2,2,1,2,1,1,2,3,0,1,2,2,1,2,1,1,2,3,0,0,3,3)
+        val kokoroChineseSampleGroups=listOf(1,2,2,1,2,1,1,2,3,0,0,3,3,0,3,0,0,3,2,1,2,1,1,2,1,2,2,1,0,3,3,0,0,3,0,3,3,0,1,2,3,0,0,3,0,3,3,0,1,2,2,1,1)
         fun kokoroLocale(key:String)=when(key.first()){'a'->"en-US";'b'->"en-GB";'e'->"es-ES";'f'->"fr-FR";'h'->"hi-IN";'i'->"it-IT";'j'->"ja-JP";'p'->"pt-BR";'z'->"zh-CN";else->"en-US"}
         kokoroNames.forEachIndexed{sid,key->
             val locale=kokoroLocale(key);val display=key.substringAfter('_').replaceFirstChar(Char::uppercase)
             val gender=if(key[1]=='f')"female" else "male"
+            val sampleLanguage=if(locale=="zh-CN")"zh-CN" else "en-US";val sampleGroup=if(sampleLanguage=="zh-CN")kokoroChineseSampleGroups[sid]else kokoroEnglishSampleGroups[sid]
+            val preview="https://github.com/HayaiApp/HayaiTTS-samples/releases/download/samples-$sampleGroup/kokoro-multi-lang-v1_0__sid${sid}__${sampleLanguage}.mp3"
             specs+=Spec(VoiceRecord("sherpa/kokoro-multi-lang-v1_0/${key.replace('_','-')}@$locale","$display · Kokoro",Locale.forLanguageTag(locale),ProviderIds.SHERPA,"Kokoro 82M",setOf(locale),false,
-                "~350 MB package · $gender · Apache-2.0",downloadId="kokoro-multi-lang-v1_0",approxSizeMb=350,license="Apache-2.0",gender=gender,quantization="FP32",estimatedRamMb=650,performanceClass="balanced"),"kokoro-multi-lang-v1_0",sid)
+                "~350 MB package · $gender · Apache-2.0",preview,downloadId="kokoro-multi-lang-v1_0",approxSizeMb=350,license="Apache-2.0",gender=gender,quantization="FP32",estimatedRamMb=650,performanceClass="balanced"),"kokoro-multi-lang-v1_0",sid)
         }
         listOf(
             Triple("alba-casual","Alba Casual","presets/alba-casual.wav"),Triple("alba-announcer","Alba Announcer","presets/alba-announcer.wav"),

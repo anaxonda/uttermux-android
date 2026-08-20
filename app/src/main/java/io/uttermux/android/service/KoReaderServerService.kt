@@ -7,7 +7,7 @@ import io.uttermux.android.MainActivity
 import io.uttermux.android.R
 import io.uttermux.android.UtterMuxApp
 import io.uttermux.android.audio.Playback
-import io.uttermux.android.config.AudioData
+import io.uttermux.android.config.RoutingSession
 import io.uttermux.android.audio.PcmTransform
 import io.uttermux.android.audio.PcmChunkQueue
 import io.uttermux.android.diagnostics.Diagnostics
@@ -67,8 +67,12 @@ class KoReaderServerService : Service() {
                     val language = json.optString("language", "en-US")
                     // Route through automatic mode so the app-wide default and fallback chain
                     // take precedence over a stale provider voice saved by the KOReader plugin.
-                    val key = digest("$text\u0000auto\u0000$speed\u0000$language")
-                    val clip=synchronized(cache){cache[key]?:StreamClip().also{cache[key]=it;generate(it,key,text,language,speed)}}
+                    val route=UtterMuxApp.instance.router.prepare("uttermux:auto",text,language)
+                    val key = digest("$text\u0000${route.primary.voice.id}\u0000$speed\u0000$language")
+                    val clip=synchronized(cache){
+                        cache[key]?.takeIf{it.startedAt==0L&&!it.playbackDone&&!it.cancelled.get()&&it.error.isBlank()}
+                            ?:StreamClip(routeKey=route.primary.voice.id).also{cache[key]=it;generate(it,key,text,speed,route)}
+                    }
                     respond(output, 200, key)
                 }
                 method == "POST" && path == "/play" -> {
@@ -76,14 +80,14 @@ class KoReaderServerService : Service() {
                     clip.startedAt=0;clip.playbackDone=false
                     pool.execute {
                         val controller=UtterMuxApp.instance.adaptiveBuffers.controller(clip.routeKey)
-                        try { Playback.playStream(24_000,controller.startupMillis(),clip.cancelled,
+                        try { Playback.playStream(24_000,{controller.startupMillis()},clip.cancelled,
                             {timeout->clip.queue.poll(timeout)},{clip.generationDone},
-                            {clip.startedAt=System.nanoTime()},{frames->clip.playedFrames+=frames},{controller.recordUnderrun()}) }
+                            {clip.startedAt=System.nanoTime()},{frames->clip.playedFrames=frames},{controller.recordUnderrun()}) }
                         finally { clip.playbackDone=true }
                     }
                     respond(output, 200, "")
                 }
-                method == "POST" && path == "/stop" -> { Playback.stop(); synchronized(cache) { cache[json.optString("handle")]?.apply { cancelled.set(true);startedAt=0;playbackDone=true } }; respond(output, 200, "") }
+                method == "POST" && path == "/stop" -> { synchronized(cache) { cache[json.optString("handle")]?.apply { cancelled.set(true);startedAt=0;playbackDone=true } }; Playback.stop(); respond(output, 200, "") }
                 method == "POST" && path == "/remaining" -> {
                     val clip = synchronized(cache) { cache[json.getString("handle")] } ?: error("Unknown handle")
                     val remaining=if(clip.playbackDone)0.0 else clip.queuedSeconds.coerceAtLeast(.02)
@@ -95,12 +99,10 @@ class KoReaderServerService : Service() {
             }
         } catch (error: Throwable) { runCatching { respond(BufferedOutputStream(it.getOutputStream()), 500, error.message ?: "Server error") } }
     }
-    private fun generate(clip:StreamClip,key:String,text:String,language:String,speed:Float) {
+    private fun generate(clip:StreamClip,key:String,text:String,speed:Float,route:RoutingSession) {
         pool.execute {
             val diagnostic=Diagnostics.request("koreader $key chars=${text.length}")
             try {
-                val route=UtterMuxApp.instance.router.prepare("uttermux:auto",text,language)
-                clip.routeKey=route.primary.voice.id
                 val controller=UtterMuxApp.instance.adaptiveBuffers.controller(clip.routeKey)
                 UtterMuxApp.instance.router.stream(route,text,speed,1f,clip.cancelled){chunk->
                     val pcm=PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000)

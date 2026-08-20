@@ -10,8 +10,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -24,6 +27,7 @@ import io.uttermux.android.diagnostics.Diagnostics
 import io.uttermux.android.provider.HttpAudio
 import io.uttermux.android.service.KoReaderServerService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
@@ -43,70 +47,81 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun UtterMuxManager(theme:String,onTheme:(String)->Unit){
-    val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by remember{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")}
+    val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by rememberSaveable{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")};var voiceCatalog by remember{mutableStateOf<VoiceCatalogUi?>(null)}
+    LaunchedEffect(revision){voiceCatalog=withContext(Dispatchers.Default){buildVoiceCatalog(app)}}
     fun refresh(){scope.launch{status="Refreshing catalogs…";val errors=withContext(Dispatchers.IO){app.refreshCatalogs()};revision++;status=if(errors.isEmpty())"Catalogs refreshed" else errors.joinToString()}}
-    LaunchedEffect(Unit){refresh()}
     Scaffold(topBar={TopAppBar(title={Column{Text("UtterMux");Text(status,style=MaterialTheme.typography.labelSmall)}})},bottomBar={NavigationBar{
         NavigationBarItem(selected=page==Page.VOICES,onClick={page=Page.VOICES},icon={Text("◉")},label={Text("Voices")})
         NavigationBarItem(selected=page==Page.SETTINGS,onClick={page=Page.SETTINGS},icon={Text("⚙")},label={Text("Settings")})
     }}){padding->Box(Modifier.padding(padding)){when(page){
-        Page.VOICES->VoicesPage(revision,{revision++},{status=it})
+        Page.VOICES->VoicesPage(revision,voiceCatalog,{revision++},{status=it})
         Page.SETTINGS->SettingsPage(revision,theme,onTheme,{refresh()},{revision++},{status=it})
     }}}
 }
 
-@Composable private fun VoicesPage(revision:Int,onChanged:()->Unit,onStatus:(String)->Unit){
-    val app=UtterMuxApp.instance
-    var voiceSearch by remember{mutableStateOf("")};var languageSearch by remember{mutableStateOf("")};var providerSearch by remember{mutableStateOf("")};var modelSearch by remember{mutableStateOf("")}
-    var locality by remember{mutableStateOf("all")};var readiness by remember{mutableStateOf("all")};var defaultVoice by remember(revision){mutableStateOf(app.settings.defaultVoice)}
-    val effectiveDefault=remember(revision,defaultVoice){app.router.effectiveDefault()};val configuredReady=remember(revision,defaultVoice){app.router.voice(defaultVoice)?.let(app.router::isAvailable)==true}
-    val all=remember(revision){app.router.voices};val providerNames=remember(revision){app.router.providerDescriptors.associate{it.id to it.name}};fun contains(value:String,query:String)=query.isBlank()||value.contains(query,true)
-    val languageOptions=remember(revision){all.flatMap{it.languages}.distinct().sortedWith(compareBy({java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH)},{it})).map{tag->
+private data class VoiceCatalogUi(val entries:List<VoiceSearchEntry>,val languages:List<Suggestion>,val services:List<Suggestion>,val performances:List<String>,val genders:List<String>,val effectiveDefault:VoiceRecord?)
+private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
+    val all=app.router.voices;val readyIds=app.router.availableVoices.mapTo(hashSetOf()){it.id};val providerNames=app.router.providerDescriptors.associate{it.id to it.name}
+    val entries=all.map{VoiceDiscovery.index(it,it.id in readyIds,providerNames[it.provider].orEmpty())}
+    val languages=all.flatMap{it.languages}.distinct().sortedWith(compareBy({java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH)},{it})).map{tag->
         val locale=java.util.Locale.forLanguageTag(tag);Suggestion(tag,listOf(locale.getDisplayLanguage(java.util.Locale.ENGLISH),locale.getDisplayCountry(java.util.Locale.ENGLISH).takeIf(String::isNotBlank),tag).filterNotNull().joinToString(" · "))
-    }}
-    val providerOptions=remember(revision){app.router.providerDescriptors.map{Suggestion(it.id,it.name)}}
-    val modelOptions=all.filter{voice->contains("${voice.provider} ${providerNames[voice.provider].orEmpty()}",providerSearch)&&contains(voice.languages.joinToString(" "){Languages.searchableName(it)},languageSearch)}.map{it.model}.distinct().sorted().map{Suggestion(it,it)}
-    val shown=all.filter{voice->
-        val ready=app.router.isAvailable(voice)
-        contains(listOf(voice.name,voice.accent,voice.gender,voice.description).joinToString(" "),voiceSearch)&&
-            contains(voice.languages.joinToString(" "){Languages.searchableName(it)},languageSearch)&&contains("${voice.provider} ${providerNames[voice.provider].orEmpty()}",providerSearch)&&contains(voice.model,modelSearch)&&
-            (locality=="all"||(locality=="offline"&&!voice.networkRequired)||(locality=="online"&&voice.networkRequired))&&
-            (readiness=="all"||(readiness=="ready"&&ready)||(readiness=="downloadable"&&!ready&&voice.downloadable))
-    }.sortedWith(compareBy<VoiceRecord>({it.model},{it.name}))
+    }
+    val services=entries.map{it.service}.distinct().sorted().map{Suggestion(it,it)}
+    val performances=entries.map{it.voice.performanceClass}.filter{it.isNotBlank()&&it!="unknown"}.distinct().sorted()
+    val genders=entries.map{it.voice.gender.lowercase()}.filter(String::isNotBlank).distinct().sorted()
+    return VoiceCatalogUi(entries,languages,services,performances,genders,app.router.effectiveDefault())
+}
+
+@Composable private fun VoicesPage(revision:Int,snapshot:VoiceCatalogUi?,onChanged:()->Unit,onStatus:(String)->Unit){
+    val app=UtterMuxApp.instance
+    var voiceSearch by rememberSaveable{mutableStateOf("")};var languageSearch by rememberSaveable{mutableStateOf("")};var serviceSearch by rememberSaveable{mutableStateOf("")}
+    var locality by rememberSaveable{mutableStateOf("all")};var readiness by rememberSaveable{mutableStateOf("all")};var performance by rememberSaveable{mutableStateOf("all")};var gender by rememberSaveable{mutableStateOf("all")}
+    var defaultVoice by rememberSaveable{mutableStateOf(app.settings.defaultVoice)};var shown by remember{mutableStateOf<List<VoiceSearchEntry>>(emptyList())}
+    LaunchedEffect(revision){defaultVoice=app.settings.defaultVoice}
+    LaunchedEffect(snapshot,voiceSearch,languageSearch,serviceSearch,locality,readiness,performance,gender){
+        if(snapshot==null){shown=emptyList();return@LaunchedEffect};delay(60)
+        val filters=VoiceFilters(voiceSearch,languageSearch,serviceSearch,locality,readiness,performance,gender)
+        shown=withContext(Dispatchers.Default){VoiceDiscovery.filter(snapshot.entries,filters)}
+    }
+    if(snapshot==null){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};return}
+    val selected=snapshot.entries.firstOrNull{it.voice.id==defaultVoice&&it.ready}?.voice;val effectiveDefault=selected?:snapshot.effectiveDefault
+    val configuredReady=selected!=null
+    fun clearFilters(){voiceSearch="";languageSearch="";serviceSearch="";locality="all";readiness="all";performance="all";gender="all"}
+    val filtersActive=voiceSearch.isNotBlank()||languageSearch.isNotBlank()||serviceSearch.isNotBlank()||listOf(locality,readiness,performance,gender).any{it!="all"}
     LazyColumn(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-        if(app.router.availableVoices.isEmpty())item{Card{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text("No voice is installed or configured",style=MaterialTheme.typography.titleMedium);Text("Download an offline voice below or configure an online provider in Settings. UtterMux intentionally bundles no voice model.");Button(onClick={app.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}){Text("Android TTS settings")}}}}
+        if(snapshot.entries.none{it.ready})item{Card{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text("No voice is installed or configured",style=MaterialTheme.typography.titleMedium);Text("Download an offline voice below or configure an online provider in Settings. UtterMux intentionally bundles no voice model.");Button(onClick={app.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}){Text("Android TTS settings")}}}}
         if(!configuredReady&&effectiveDefault!=null)item{Card{Text("Configured default is unavailable. Currently using ${effectiveDefault.name}; the saved preference will be restored automatically if its provider becomes available.",Modifier.padding(12.dp))}}
-        item{Text("Find a voice",style=MaterialTheme.typography.titleMedium)}
-        item{SearchField("Voice or accent",voiceSearch){voiceSearch=it}}
-        item{SuggestionSearchField("Language",languageSearch,languageOptions){languageSearch=it}}
-        item{SuggestionSearchField("Provider",providerSearch,providerOptions){providerSearch=it;modelSearch=""}}
-        item{SuggestionSearchField("Model family or variant",modelSearch,modelOptions){modelSearch=it}}
-        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Location",locality,listOf("all","offline","online")){locality=it}};Box(Modifier.weight(1f)){Selector("Availability",readiness,listOf("all","ready","downloadable")){readiness=it}}}}
-        item{Text("${shown.size} of ${all.size} voices",style=MaterialTheme.typography.bodySmall)}
-        items(shown,key={it.id}){voice->VoiceCard(voice,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},{onStatus(it)})}
+        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Find a voice",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(enabled=filtersActive,onClick=::clearFilters){Text("Clear filters")}}}
+        item{SearchField("Voice, accent, or variant",voiceSearch){voiceSearch=it}}
+        item{SuggestionSearchField("Language",languageSearch,snapshot.languages){languageSearch=it}}
+        item{SuggestionSearchField("Engine or service",serviceSearch,snapshot.services){serviceSearch=it}}
+        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Location",locality,listOf("all","on-device","cloud")){locality=it}};Box(Modifier.weight(1f)){Selector("Availability",readiness,listOf("all","ready","downloadable","setup")){readiness=it}}}}
+        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Performance",performance,listOf("all")+snapshot.performances){performance=it}};Box(Modifier.weight(1f)){Selector("Gender",gender,listOf("all")+snapshot.genders){gender=it}}}}
+        item{Text("${shown.size} of ${snapshot.entries.size} voices",style=MaterialTheme.typography.bodySmall)}
+        items(shown,key={it.voice.id}){entry->val voice=entry.voice;VoiceCard(voice,entry.service,entry.ready,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},{onStatus(it)})}
     }
 }
 
-@Composable private fun SearchField(label:String,value:String,onValue:(String)->Unit)=OutlinedTextField(value,onValue,Modifier.fillMaxWidth().heightIn(min=56.dp),label={Text(label)},singleLine=true)
+@Composable private fun SearchField(label:String,value:String,onValue:(String)->Unit)=OutlinedTextField(value,onValue,Modifier.fillMaxWidth().heightIn(min=56.dp),label={Text(label)},singleLine=true,trailingIcon={if(value.isNotBlank())IconButton({onValue("")},Modifier.semantics{contentDescription="Clear $label"}){Text("×")}})
 
 private data class Suggestion(val value:String,val label:String)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun SuggestionSearchField(label:String,value:String,options:List<Suggestion>,onValue:(String)->Unit){
     var expanded by remember{mutableStateOf(false)}
-    val matches=options.filter{value.isBlank()||it.value.contains(value,true)||it.label.contains(value,true)}.take(30)
+    val matches=remember(value,options){options.filter{value.isBlank()||it.value.contains(value,true)||it.label.contains(value,true)}.take(30)}
     ExposedDropdownMenuBox(expanded&&matches.isNotEmpty(),{expanded=it}){
-        OutlinedTextField(value,{onValue(it);expanded=true},Modifier.fillMaxWidth().heightIn(min=56.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),label={Text(label)},singleLine=true,trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
+        OutlinedTextField(value,{onValue(it);expanded=true},Modifier.fillMaxWidth().heightIn(min=56.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),label={Text(label)},singleLine=true,trailingIcon={if(value.isNotBlank())IconButton({onValue("");expanded=false},Modifier.semantics{contentDescription="Clear $label"}){Text("×")}else ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
         ExposedDropdownMenu(expanded&&matches.isNotEmpty(),{expanded=false}){matches.forEach{item->DropdownMenuItem(text={Text(item.label)},onClick={onValue(item.value);expanded=false})}}
     }
 }
 
-@Composable private fun VoiceCard(voice:VoiceRecord,selected:Boolean,onDefault:()->Unit,onChanged:()->Unit,onStatus:(String)->Unit){
+@Composable private fun VoiceCard(voice:VoiceRecord,service:String,catalogReady:Boolean,selected:Boolean,onDefault:()->Unit,onChanged:()->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();val localId=voice.downloadId.ifBlank{voice.takeIf{it.provider==ProviderIds.SHERPA}?.id?.split('/')?.getOrNull(1).orEmpty()}
     var installed by remember(voice.id){mutableStateOf(localId.isBlank()&&app.router.isAvailable(voice)||localId.isNotBlank()&&runCatching{app.models.installed(localId)}.getOrDefault(false))}
     var repairNeeded by remember(voice.id,installed){mutableStateOf(installed&&localId.isNotBlank()&&runCatching{app.models.needsRepair(localId)}.getOrDefault(false))}
-    val ready=if(localId.isNotBlank())installed else app.router.isAvailable(voice);val canRemotePreview=voice.previewUrl.isNotBlank();val canPreview=ready||canRemotePreview
+    val ready=if(localId.isNotBlank())installed else catalogReady;val canRemotePreview=voice.previewUrl.isNotBlank();val canPreview=ready||canRemotePreview
     Card(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
-        Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(voice.name,style=MaterialTheme.typography.titleSmall);Text("${voice.provider} · ${voice.model} · ${voice.languages.joinToString()}",style=MaterialTheme.typography.bodySmall);if(voice.description.isNotBlank())Text(voice.description,style=MaterialTheme.typography.bodySmall)};RadioButton(selected,onClick=onDefault,enabled=ready)}
+        Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(voice.name,style=MaterialTheme.typography.titleSmall);Text("$service · ${voice.model} · ${voice.languages.joinToString()}",style=MaterialTheme.typography.bodySmall);if(voice.description.isNotBlank())Text(voice.description,style=MaterialTheme.typography.bodySmall)};RadioButton(selected,onClick=onDefault,enabled=ready)}
         val facts=listOf(voice.quantization,voice.approxSizeMb.takeIf{it>0}?.let{"$it MB"}.orEmpty(),voice.estimatedRamMb.takeIf{it>0}?.let{"~$it MB RAM"}.orEmpty(),voice.performanceClass.takeUnless{it=="unknown"}.orEmpty(),voice.license).filter(String::isNotBlank)
         if(facts.isNotEmpty())Text(facts.joinToString(" · "),style=MaterialTheme.typography.labelSmall)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
@@ -128,11 +143,11 @@ private data class Suggestion(val value:String,val label:String)
     val app=UtterMuxApp.instance;val clipboard=LocalClipboardManager.current;val values=remember{mutableStateMapOf<String,String>()};var providersOpen by remember{mutableStateOf(false)};var routesOpen by remember{mutableStateOf(false)};var storageOpen by remember{mutableStateOf(false)};var diagnosticsOpen by remember{mutableStateOf(false)}
     var language by remember{mutableStateOf("en-US")};var selected by remember{mutableStateOf("")};var routeRevision by remember{mutableIntStateOf(0)};var chain by remember(language,routeRevision,revision){mutableStateOf(app.settings.routeChain(language))}
     fun pocketLabel(steps:Int)=when(steps){3->"Fast · 3 steps";5->"Highest quality · 5 steps";else->"Balanced · 4 steps"}
-    var koReader by remember{mutableStateOf(app.settings.koReaderEnabled)};var profile by remember{mutableStateOf(app.settings.latencyProfile)};var pocketQuality by remember{mutableStateOf(pocketLabel(app.settings.pocketNumSteps))};var startup by remember{mutableStateOf(app.settings.manualStartupMs.toString())};var cache by remember{mutableStateOf(app.settings.modelCacheSize.toString())};var report by remember{mutableStateOf(Diagnostics.report())}
-    LaunchedEffect(revision){app.router.providerDescriptors.flatMap{it.credentialFields}.forEach{values[it.key]=app.secure.get(it.key)}}
+    var koReader by remember{mutableStateOf(app.settings.koReaderEnabled)};var profile by remember{mutableStateOf(app.settings.latencyProfile)};var pocketQuality by remember{mutableStateOf(pocketLabel(app.settings.pocketNumSteps))};var startup by remember{mutableStateOf(app.settings.manualStartupMs.toString())};var cache by remember{mutableStateOf(app.settings.modelCacheSize.toString())};var report by remember{mutableStateOf("")}
+    LaunchedEffect(revision){val loaded=withContext(Dispatchers.IO){app.router.providerDescriptors.flatMap{it.credentialFields}.associate{it.key to app.secure.get(it.key)}};values.putAll(loaded)}
     fun saveRoute(next:List<String>){chain=next;app.settings.setRouteChain(language,next);routeRevision++;onStatus("Saved ${Languages.normalized(language)} fallback chain")}
-    val choices=app.router.voices.filter{it.languages.any{tag->Languages.matches(tag,language)}}
-    val installed=app.models.models.filter{runCatching{app.models.installed(it.id)}.getOrDefault(false)}
+    val choices=remember(routesOpen,language,revision){if(routesOpen)app.router.voices.filter{it.languages.any{tag->Languages.matches(tag,language)}}else emptyList()}
+    val installed=remember(storageOpen,revision){if(storageOpen)app.models.models.filter{runCatching{app.models.installed(it.id)}.getOrDefault(false)}else emptyList()}
     LazyColumn(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
         item{Text("Appearance and playback",style=MaterialTheme.typography.titleMedium)}
         item{Selector("Theme",theme,listOf("system","light","dark"),onTheme)}

@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.Locale
+import java.net.Socket
+import org.json.JSONObject
 
 /** Explicit, opt-in device tests. These download hundreds of megabytes and are
  * intentionally not part of the ordinary connected test suite. */
@@ -32,9 +34,9 @@ class LargeModelIntegrationTest {
     }
 
     @Test fun mossDownloadAndExactVoiceSynthesis(){
-        val id="moss-tts-nano-100m-onnx"
+        val id="moss-tts-nano-100m-onnx-int8"
         install(id)
-        val voice=app.router.voices.first{it.provider=="moss"&&it.name.startsWith("Ava")}
+        val voice=app.router.voices.first{it.provider=="moss"&&it.downloadId==id&&it.name.startsWith("Ava")}
         val began=android.os.SystemClock.elapsedRealtime()
         val audio=app.router.synthesizeExact(voice.id,"MOSS is speaking on this Android phone.","en-US",1f,AtomicBoolean())
         verify("MOSS",audio,began)
@@ -43,8 +45,22 @@ class LargeModelIntegrationTest {
     @Test fun installedPocketAndMossCompleteThroughAndroidSystemApi(){
         listOf(
             app.router.voices.first{it.model=="Pocket TTS INT8"},
-            app.router.voices.first{it.provider=="moss"&&it.name.startsWith("Ava")},
+            app.router.voices.first{it.provider=="moss"&&it.downloadId=="moss-tts-nano-100m-onnx-int8"&&it.name.startsWith("Ava")},
         ).forEach(::speakThroughAndroid)
+    }
+
+    @Test fun mossInt8SequentialStreamBenchmark(){
+        val id="moss-tts-nano-100m-onnx-int8";install(id)
+        val voice=app.router.voices.first{it.provider=="moss"&&it.downloadId==id&&it.name.startsWith("Ava")}
+        val provider=app.providers.first{it.id==voice.provider};provider.warm(voice)
+        repeat(2){index->
+            val began=android.os.SystemClock.elapsedRealtime();var firstAt=0L;var audioMs=0L;var generatedMs=0L;var chunks=0
+            provider.stream(provider.prepare(voice,"en-US"),"Section ${index+1}. This benchmark measures whether quantized MOSS can sustain continuous document reading.",1f,1f,AtomicBoolean()){chunk->
+                if(firstAt==0L)firstAt=android.os.SystemClock.elapsedRealtime();audioMs+=chunk.pcm16.size/2L*1000/chunk.sampleRate;generatedMs+=chunk.generatedNanos/1_000_000;chunks++;true
+            }
+            val elapsed=android.os.SystemClock.elapsedRealtime()-began;assertTrue(audioMs>500)
+            Log.i("UtterMuxLargeTest","MOSS INT8 request=${index+1}: first PCM ${firstAt-began}ms, complete ${elapsed}ms, audio=${audioMs}ms, callback-generation=${generatedMs}ms, chunks=$chunks, RTF=${"%.2f".format(elapsed/audioMs.toDouble())}")
+        }
     }
 
     @Test fun pocketQualityAndWarmRequestBenchmark(){
@@ -84,6 +100,26 @@ class LargeModelIntegrationTest {
         Log.i("UtterMuxLargeTest","Pocket callback cancellation completed in ${elapsed}ms")
     }
 
+    @Test fun koReaderPocketBridgeCompletesAndReplaysSameText(){
+        val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice))
+        val old=app.settings.defaultVoice;app.settings.defaultVoice=voice.id
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        context.startForegroundService(android.content.Intent(context,io.uttermux.android.service.KoReaderServerService::class.java))
+        try{
+            Thread.sleep(750)
+            repeat(2){pass->
+                val handle=post("/",JSONObject().put("text","The same Pocket bridge section must play fully every time.").put("language","en-US").put("length_scale",1.0).toString())
+                post("/play",JSONObject().put("handle",handle).toString())
+                val deadline=android.os.SystemClock.elapsedRealtime()+20_000;var remaining=Double.MAX_VALUE;var error=""
+                while(android.os.SystemClock.elapsedRealtime()<deadline){
+                    val state=JSONObject(post("/remaining",JSONObject().put("handle",handle).toString()));remaining=state.getDouble("remaining");error=state.optString("error")
+                    if(remaining==0.0)break;Thread.sleep(100)
+                }
+                assertTrue("KOReader pass ${pass+1} error: $error",error.isBlank());assertEquals("KOReader pass ${pass+1} did not complete",0.0,remaining,0.0)
+            }
+        }finally{context.stopService(android.content.Intent(context,io.uttermux.android.service.KoReaderServerService::class.java));app.settings.defaultVoice=old}
+    }
+
     @Test fun installedConventionalSherpaVoiceStillSynthesizes(){
         val voice=app.router.availableVoices.firstOrNull{it.provider=="sherpa"&&it.model!="Pocket TTS INT8"}
             ?:return
@@ -97,6 +133,13 @@ class LargeModelIntegrationTest {
         val began=android.os.SystemClock.elapsedRealtime()
         app.models.install(id,{Log.i("UtterMuxLargeTest",it)})
         assertTrue(app.models.installed(id));Log.i("UtterMuxLargeTest","Installed $id in ${android.os.SystemClock.elapsedRealtime()-began}ms")
+    }
+    private fun post(path:String,body:String):String{
+        return Socket("127.0.0.1",5000).use{socket->
+            socket.soTimeout=20_000;val bytes=body.toByteArray();val output=socket.getOutputStream()
+            output.write("POST $path HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray());output.write(bytes);output.flush()
+            val response=socket.getInputStream().bufferedReader().readText();assertTrue(response.startsWith("HTTP/1.1 200"));response.substringAfter("\r\n\r\n")
+        }
     }
     private fun verify(name:String,audio:AudioData,began:Long){
         assertTrue("$name sample rate ${audio.sampleRate}",audio.sampleRate>=16_000)

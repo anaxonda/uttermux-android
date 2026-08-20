@@ -45,6 +45,20 @@ class ModelManager(private val context: Context) {
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_step.onnx","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_step.onnx","9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"),
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_shared.data","e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"),
         )),
+        LocalModel("moss-tts-nano-100m-onnx-int8","moss","","","MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx",assets=listOf(
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/browser_poc_manifest.json","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/browser_poc_manifest.json","097d80e993dc29f0bae427590b4f77084a161cb578b50d82c29f455d5faa9eee"),
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/tts_browser_onnx_meta.json","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/tts_browser_onnx_meta.json","3edf25232dcd0af3d061c837e9a968a39e2f8592e06777d740503c4f2244f95c"),
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/tokenizer.model","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/tokenizer.model","c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff"),
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/moss_tts_prefill.onnx","25409338ab270f9cad4faea12e5ae9ee29dbc3cacb8ee9eafbc16fc85706b095"),
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/moss_tts_decode_step.onnx","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/moss_tts_decode_step.onnx","854d6d905f230e58b03fd12ca9a930d852086db231d10c00d21fb66f8a567aee"),
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/moss_tts_local_fixed_sampled_frame.onnx","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/moss_tts_local_fixed_sampled_frame.onnx","3baf66aac8bb52e4d7adc9204299a4947788b100efdd07af198f117a59f120a6"),
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/moss_tts_global_shared_int8.data","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/moss_tts_global_shared_int8.data","b127207a2274826b113fd3f2c4917ef366535c3324dd0f8fe95d6355626a85bb"),
+            RemoteAsset("MOSS-TTS-Nano-100M-ONNX/moss_tts_local_fixed_sampled_frame_int8.data","https://huggingface.co/REALBITS/MOSS-TTS-Nano-100M-ONNX-int8/resolve/main/moss_tts_local_fixed_sampled_frame_int8.data","dbbdde4c10bf59e7d63087c6688ca18bad46088d5e4c8c0b7d9e858304d44aa4"),
+            RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/codec_browser_onnx_meta.json","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/codec_browser_onnx_meta.json","3e291c883bb7d11ff2fe8e964e3e495519760358859f35c951254c7741592731"),
+            RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_full.onnx","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_full.onnx","0fbbafe3fd4afa2a019af5c5ced204af6e2d1db044fa40f021525d2aee95b4ac"),
+            RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_step.onnx","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_step.onnx","9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"),
+            RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_shared.data","e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"),
+        )),
     ).forEach(::register) }
     val root = File(context.filesDir,"models").apply { mkdirs() }
     fun register(model:LocalModel) { synchronized(modelsById) { modelsById[model.id] = model } }

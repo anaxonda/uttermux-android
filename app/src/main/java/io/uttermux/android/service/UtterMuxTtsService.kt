@@ -14,6 +14,7 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.Executors
 import java.util.concurrent.ConcurrentHashMap
+import java.util.ArrayDeque
 
 class UtterMuxTtsService : TextToSpeechService() {
     @Volatile private var cancelled = AtomicBoolean()
@@ -82,9 +83,23 @@ class UtterMuxTtsService : TextToSpeechService() {
             val providerSpeed=(request.speechRate/100f/pitch).coerceIn(.5f,2f)
             val route=router.prepare(request.voiceName,text,locale)
             val controller=UtterMuxApp.instance.adaptiveBuffers.controller(route.primary.voice.id)
+            data class PendingAudio(val pcm:ByteArray,val range:io.uttermux.android.config.TextRange)
+            val pending=ArrayDeque<PendingAudio>();var pendingBytes=0;var deliveryStarted=false
             Diagnostics.record(diagnostic,"routed","${route.primary.voice.id} ${route.primary.strategy}")
             if(callback.start(24_000,AudioFormat.ENCODING_PCM_16BIT,1)!=TextToSpeech.SUCCESS){signal.set(true);errorOnce(TextToSpeech.ERROR_OUTPUT);return}
             Diagnostics.record(diagnostic,"callback-start","${(System.nanoTime()-began)/1_000_000}ms")
+            fun deliver(item:PendingAudio):Boolean {
+                callback.rangeStart(emittedFrames,item.range.start.coerceIn(0,text.length),item.range.endExclusive.coerceIn(0,text.length))
+                var offset=0;val maximum=callback.maxBufferSize.coerceAtLeast(2)
+                while(offset<item.pcm.size&&!signal.get()){
+                    val size=minOf(maximum,item.pcm.size-offset)
+                    if(callback.audioAvailable(item.pcm,offset,size)!=TextToSpeech.SUCCESS){signal.set(true);return false}
+                    offset+=size
+                }
+                emittedFrames+=item.pcm.size/2
+                return !signal.get()
+            }
+            fun flushPending():Boolean {while(pending.isNotEmpty())if(!deliver(pending.removeFirst()))return false;pendingBytes=0;return true}
             router.stream(route,text,providerSpeed,pitch,signal){chunk->
                 if(signal.get())return@stream false
                 if(chunk.pcm16.isEmpty()||chunk.pcm16.size%2!=0)throw IllegalArgumentException("Provider returned invalid PCM16 audio")
@@ -92,16 +107,18 @@ class UtterMuxTtsService : TextToSpeechService() {
                 val pcm=PcmTransform.resamplePcm16(pitched,chunk.sampleRate,24_000)
                 controller.record(chunk.generatedNanos,pcm.size/2.0/24_000.0)
                 if(firstAudio){firstAudio=false;Diagnostics.record(diagnostic,"first-audio","${(System.nanoTime()-began)/1_000_000}ms")}
-                callback.rangeStart(emittedFrames,chunk.range.start.coerceIn(0,text.length),chunk.range.endExclusive.coerceIn(0,text.length))
-                var offset=0;val maximum=callback.maxBufferSize.coerceAtLeast(2)
-                while(offset<pcm.size&&!signal.get()){
-                    val size=minOf(maximum,pcm.size-offset)
-                    if(callback.audioAvailable(pcm,offset,size)!=TextToSpeech.SUCCESS){signal.set(true);return@stream false}
-                    offset+=size
+                val item=PendingAudio(pcm,chunk.range)
+                if(!deliveryStarted){
+                    pending+=item;pendingBytes+=pcm.size
+                    val targetBytes=24_000*2*controller.startupMillis()/1000
+                    if(pendingBytes>=targetBytes){deliveryStarted=true;if(!flushPending())return@stream false}
+                }else if(!deliver(item))return@stream false
+                if(!signal.get()&&deliveryStarted&&chunk.generatedNanos>pcm.size/2.0/24_000.0*1_000_000_000L){
+                    controller.recordUnderrun()
                 }
-                emittedFrames+=pcm.size/2
                 !signal.get()
             }
+            if(!signal.get()&&!flushPending())return
         } catch (_:InterruptedException){signal.set(true)}
         catch(error:Throwable){
             Log.e("UtterMuxTTS","Synthesis failed for $locale/${request.voiceName}: ${error.message}",error)

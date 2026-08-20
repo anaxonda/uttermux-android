@@ -33,7 +33,7 @@ class ProcessTextActivity : Activity() {
                         false
                     }}finally{done.set(true);queue.offer(ByteArray(0),100)}
                 }
-                Playback.playStream(24_000,controller.startupMillis(),cancelled,{timeout->queue.poll(timeout)},{done.get()},onUnderrun={controller.recordUnderrun()})
+                Playback.playStream(24_000,{controller.startupMillis()},cancelled,{timeout->queue.poll(timeout)},{done.get()},onUnderrun={controller.recordUnderrun()})
                 producer.await()
             } }
                 .onSuccess { }
