@@ -174,7 +174,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         val spec=allSpecs().first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
         var sequence=0
         val segments=if(manager.model(spec.model).engine=="pocket")
-            TextSegmenter.split(text,firstTarget=100,nextTarget=120,maxChars=165)
+            TextSegmenter.split(text,firstTarget=45,nextTarget=60,maxChars=90,boundaries=".!?;,:\n")
         else TextSegmenter.split(text)
         synchronized(runtimeLock){val tts=engine(spec);for(segment in segments) {
             if(cancelled.get())throw InterruptedException()

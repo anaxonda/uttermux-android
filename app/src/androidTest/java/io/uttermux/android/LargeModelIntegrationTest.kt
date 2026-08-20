@@ -83,6 +83,14 @@ class LargeModelIntegrationTest {
         Log.i("UtterMuxLargeTest","Pocket callback cancellation completed in ${elapsed}ms")
     }
 
+    @Test fun pocketRepeatedClauseStreamingDiagnostic(){
+        val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice))
+        val text="MISTER HANEDA WAS senior to Mister Omochi, who was senior to Mister Saito, who was senior to Miss Mori, who was senior to me, I was senior to no one."
+        val provider=app.providers.first{it.id==voice.provider};var frames=0L
+        provider.stream(provider.prepare(voice,"en-US"),text,1f,1f,AtomicBoolean()){frames+=it.pcm16.size/2;true}
+        assertTrue(frames>0);Log.i("UtterMuxLargeTest","Pocket repeated-clause diagnostic emitted $frames frames")
+    }
+
     @Test fun koReaderPocketBridgeCompletesAndReplaysSameText(){
         val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice))
         val old=app.settings.defaultVoice;app.settings.defaultVoice=voice.id
