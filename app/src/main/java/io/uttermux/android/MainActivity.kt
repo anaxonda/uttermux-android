@@ -59,6 +59,7 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
     val app=UtterMuxApp.instance
     var voiceSearch by remember{mutableStateOf("")};var languageSearch by remember{mutableStateOf("")};var providerSearch by remember{mutableStateOf("")};var modelSearch by remember{mutableStateOf("")}
     var locality by remember{mutableStateOf("all")};var readiness by remember{mutableStateOf("all")};var defaultVoice by remember(revision){mutableStateOf(app.settings.defaultVoice)}
+    val effectiveDefault=remember(revision,defaultVoice){app.router.effectiveDefault()};val configuredReady=remember(revision,defaultVoice){app.router.voice(defaultVoice)?.let(app.router::isAvailable)==true}
     val all=remember(revision){app.router.voices};val providerNames=remember(revision){app.router.providerDescriptors.associate{it.id to it.name}};fun contains(value:String,query:String)=query.isBlank()||value.contains(query,true)
     val shown=all.filter{voice->
         val ready=app.router.isAvailable(voice)
@@ -69,6 +70,7 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
     }.sortedWith(compareBy<VoiceRecord>({it.model},{it.name}))
     LazyColumn(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
         if(app.router.availableVoices.isEmpty())item{Card{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text("No voice is installed or configured",style=MaterialTheme.typography.titleMedium);Text("Download an offline voice below or configure an online provider in Settings. UtterMux intentionally bundles no voice model.");Button(onClick={app.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}){Text("Android TTS settings")}}}}
+        if(!configuredReady&&effectiveDefault!=null)item{Card{Text("Configured default is unavailable. Currently using ${effectiveDefault.name}; the saved preference will be restored automatically if its provider becomes available.",Modifier.padding(12.dp))}}
         item{Text("Find a voice",style=MaterialTheme.typography.titleMedium)}
         item{SearchField("Voice or accent",voiceSearch){voiceSearch=it}}
         item{SearchField("Language",languageSearch){languageSearch=it}}
@@ -76,7 +78,7 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
         item{SearchField("Model family or variant",modelSearch){modelSearch=it}}
         item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Location",locality,listOf("all","offline","online")){locality=it}};Box(Modifier.weight(1f)){Selector("Availability",readiness,listOf("all","ready","downloadable")){readiness=it}}}}
         item{Text("${shown.size} of ${all.size} voices",style=MaterialTheme.typography.bodySmall)}
-        items(shown,key={it.id}){voice->VoiceCard(voice,voice.id==defaultVoice,{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},{onStatus(it)})}
+        items(shown,key={it.id}){voice->VoiceCard(voice,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},{onStatus(it)})}
     }
 }
 

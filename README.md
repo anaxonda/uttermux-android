@@ -77,8 +77,8 @@ notes are documentation, not dead UI rows. Local models are optional downloads.
 Pocket reuses one runtime/model with per-voice licensed reference WAV files.
 MOSS-TTS-Nano downloads approximately 760 MB and uses its official ONNX graphs,
 a native-compatible SentencePiece implementation, incremental token generation,
-and overlapping codec decoding. MOSS remains a heavy option and needs real-device
-acceptance testing for sustained document-reading speed and memory use.
+and overlapping codec decoding. MOSS remains a heavy option and needs acceptance
+testing on each device class before sustained document reading.
 
 Qwen, Audio8, Chatterbox, NeuTTS, LEMAS, X-Voice, and OmniVoice are intentionally
 not advertised in the app until an arm64 runtime passes system-TTS, cancellation,
@@ -111,6 +111,16 @@ silence trimming, adaptive buffering policy, routing, model management, MOSS
 tokenization, and system-TTS compatibility. On the development
 Samsung SM-G970F, Alan Low produced first audio in about 2.1 seconds cold and
 0.33 seconds warm while completing through Android's system TTS callback.
+
+Opt-in large-model tests also download, checksum, initialize, synthesize, and
+complete through Android's real `TextToSpeech` API. On that SM-G970F, Pocket
+occupies 198 MB and directly generated 3.76 seconds of audio in 4.51 seconds;
+its cold system request reached first audio in 3.14 seconds. MOSS occupies
+684 MB and generated 3.2 seconds in 9.81 seconds; its cold system request took
+7.35 seconds to first audio and 11.94 seconds overall. MOSS is therefore
+functional on this phone but not suitable for uninterrupted live reading;
+Pocket is much closer to usable real time. These tests are excluded from the
+ordinary suite because they consume substantial bandwidth, storage, and time.
 
 The project is GPL-3.0-or-later. The pinned sherpa-onnx JNI wrapper and native
 libraries are Apache-2.0 components from k2-fsa; individual voice/model licenses

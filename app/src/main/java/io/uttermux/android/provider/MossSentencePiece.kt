@@ -43,6 +43,14 @@ class MossSentencePiece(modelFile:File) {
         fun varint():Long{var result=0L;var shift=0;while(position<data.size){val value=data[position++].toInt() and 255;result=result or ((value and 127).toLong() shl shift);if(value and 128==0)return result;shift+=7};error("Truncated protobuf varint")}
         fun bytes():ByteArray{val size=varint().toInt();require(size>=0&&position+size<=data.size){"Invalid protobuf length"};return data.copyOfRange(position,position+size).also{position+=size}}
         fun fixed32():Int{require(position+4<=data.size);return (data[position++].toInt() and 255) or ((data[position++].toInt() and 255) shl 8) or ((data[position++].toInt() and 255) shl 16) or ((data[position++].toInt() and 255) shl 24)}
-        fun skip(wire:Int){when(wire){0->varint();1->position+=8;2->position+=varint().toInt();5->position+=4;else->error("Unsupported protobuf wire type $wire")};require(position<=data.size){"Truncated protobuf field"}}
+        fun skip(wire:Int){when(wire){
+            0->varint();1->position+=8
+            // Keep the position read after varint(): using `position += varint()`
+            // evaluates the old position first and lands before the real end.
+            2->{val size=varint().toInt();position+=size}
+            3->while(true){val nestedWire=varint().toInt() and 7;if(nestedWire==4)break;skip(nestedWire)}
+            5->position+=4
+            else->error("Unsupported protobuf wire type $wire")
+        };require(position<=data.size){"Truncated protobuf field"}}
     }
 }

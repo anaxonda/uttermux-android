@@ -84,7 +84,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
                 val description = "${item.getString("language_name")} · ${item.optString("country")} · ${item.getString("quality")} · ${formatBytes(item.optLong("download_size"))}"
                 val sampleUrl=item.optString("sample_url").replace("speaker_0.mp3","speaker_${sid}.mp3")
                 val voice = VoiceRecord("sherpa/$modelId/$speakerName@$localeTag", "$display · Piper", Locale.forLanguageTag(localeTag), ProviderIds.SHERPA,
-                    "Piper ${item.getString("quality")}", setOf(localeTag), false, description, sampleUrl, modelId, downloadable)
+                    "Piper ${item.getString("quality")}", setOf(localeTag), false, description, sampleUrl, modelId, downloadable,
+                    approxSizeMb=(item.optLong("download_size")/1024/1024).toInt(),license=item.optString("license","Model-specific"),quantization="ONNX",performanceClass="fast")
                 specs += Spec(voice, modelId, sid)
             }
         }

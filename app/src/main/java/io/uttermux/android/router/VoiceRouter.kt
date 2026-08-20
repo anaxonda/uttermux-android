@@ -13,6 +13,10 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
     val availableVoices get() = providers.values.flatMap(TtsProvider::availableVoices)
     fun isAvailable(voice:VoiceRecord)=providers[voice.provider]?.isAvailable(voice)==true
     fun voice(id: String): VoiceRecord? = voices.firstOrNull { it.id == id || it.id.substringBefore('@') == id.substringBefore('@') }
+    fun effectiveDefault():VoiceRecord? {
+        val configured=settings.defaultVoice;val language=configured.substringAfter('@',"en-US")
+        return candidates(null,language).firstOrNull()
+    }
     fun candidates(requestedVoice: String?, language: String): List<VoiceRecord> {
         val result = mutableListOf<VoiceRecord>()
         val explicit=!requestedVoice.isNullOrBlank()&&!requestedVoice.startsWith("uttermux:auto")
@@ -25,7 +29,9 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
         add(settings.route(language))
         // Local voices are safe implicit fallbacks. Metered network providers must
         // be placed explicitly in the language route chain.
-        availableVoices.filter { !it.networkRequired&&it.languages.any { tag -> Languages.matches(tag, language) } }.forEach { if (it !in result) result += it }
+        fun fallbackRank(voice:VoiceRecord)=when(voice.performanceClass){"fast"->0;"unknown"->1;"balanced"->2;"cloud"->3;"heavy"->4;else->2}
+        availableVoices.filter { !it.networkRequired&&it.languages.any { tag -> Languages.matches(tag, language) } }
+            .sortedWith(compareBy(::fallbackRank,{it.name})).forEach { if (it !in result) result += it }
         return result.filter { providers[it.provider]?.isAvailable(it) == true }
     }
     fun prepare(requestedVoice:String?,text:String,language:String):RoutingSession {
