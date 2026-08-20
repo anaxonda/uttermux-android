@@ -31,6 +31,74 @@ Paid cloud providers are never inserted as implicit fallbacks. Add them to a
 language route explicitly. API keys are encrypted with Android Keystore and are
 excluded from backup and device transfer.
 
+## App navigation
+
+- **Voices** searches voice name, language, library, model/version, and accent;
+  filters local/cloud readiness and capability; installs, previews, and selects
+  the default voice. Searchable pickers open their list on the first tap and the
+  keyboard only on a second tap or the search icon.
+- **Create** records or imports a permitted reference sample for Pocket, lets
+  you preview both the source and generated voice, and manages private profiles.
+- **Settings** contains general integration, individually expandable online
+  service cards, language routing, downloaded-model storage, explained advanced
+  playback controls, diagnostics, and privacy/version information.
+
+Filters and list position survive tab changes and rotation but intentionally
+start clean after a complete process relaunch.
+
+## Supported local models
+
+No model is bundled. Sizes and RAM are approximate and can change when upstream
+artifacts change; the catalog is the download source of truth.
+
+| Library / variant | Languages / voices | Clone | Download | Quantization | Approx. RAM | SM-G970F assessment | Upstream |
+| --- | --- | ---: | ---: | --- | ---: | --- | --- |
+| Piper / VITS | 174 packages, 2,707 speaker choices, 50+ languages | No | varies | ONNX | varies | **Recommended**; best continuity baseline | [Piper](https://github.com/rhasspy/piper) |
+| Inflect Nano v2 | English, fixed voice | No | ~17 MB | FP32 | ~80 MB | Likely excellent; not separately benchmarked | [Inflect Nano](https://huggingface.co/owensong/Inflect-Nano-v2) |
+| Inflect Micro v2 | English, fixed voice | No | ~43 MB | FP32 | ~120 MB | Likely excellent; not separately benchmarked | [Inflect Micro](https://huggingface.co/owensong/Inflect-Micro-v2) |
+| Matcha LJSpeech | English, one voice | No | ~77 MB | FP32 | ~260 MB | Expected usable; sustained test pending | [sherpa-onnx TTS](https://github.com/k2-fsa/sherpa-onnx) |
+| Kitten Nano 0.8 | English, eight voices | No | ~31 MB | INT8 | ~120 MB | **Recommended**; measured faster than realtime | [KittenTTS](https://github.com/KittenML/KittenTTS) |
+| Kokoro 1.0 / 1.1 | multilingual, 53 / 103 speakers | No | ~348–350 MB | FP32 | ~650–700 MB | Works, but too slow for seamless reading | [sherpa-onnx Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/) |
+| Pocket TTS | English, ten references plus private profiles | **Yes** | ~176 MB | INT8 | ~420 MB | Usable with reader-dependent section gaps | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
+| Supertonic 3 | 31 languages, ten styles | No | ~129 MB | INT8 | ~350 MB | Expected usable; sustained test pending | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) |
+
+Kokoro INT8 is not exposed because the current Android/ARM export has produced
+intermittent rail-pinned audio and regressions; the FP32 graph is the supported
+variant. A model is not promoted merely because its runtime can initialize.
+
+## Candidate and rejected local models
+
+These entries are documentation, not dead rows in the app. “Candidate” means an
+arm64 implementation still has to pass exact system-TTS ranges, cancellation,
+memory, sustained RTF, and multi-client reader tests.
+
+| Model | Main value | Runtime position | Likely phone tier | Current decision |
+| --- | --- | --- | --- | --- |
+| MOSS-TTS-Nano | multilingual cloning/streaming | Official ONNX path exists | mid/high | **Rejected for now:** measured sustained latency and pauses were not usable |
+| ZipVoice Distill | English/Chinese zero-shot cloning | Supported by sherpa-onnx | mid/high | Candidate; requires reference audio and transcript, with no suitable preset catalog yet |
+| Chatterbox Nano | English cloning | Mobile ONNX path is not yet accepted here | high | Candidate after a maintained arm64 runtime |
+| NeuTTS Nano | multilingual per-model cloning | GGUF backbone plus ONNX codec | high | Candidate; custom runtime and sustained tests required |
+| Qwen3-TTS 0.6B | built-in voices or cloning | Local Android ports exist outside UtterMux | 6–8 GB preferred | Deferred; large runtime and memory acceptance work |
+| Audio8 0.6B INT4 | multilingual cloning and streaming | Official ONNX package, Android unproven here | high | Candidate after ARM benchmarks |
+| LEMAS-TTS | multilingual cloning | weak mobile ecosystem | high | Research only |
+| X-Voice | cross-lingual cloning | PyTorch-oriented and noncommercial checkpoint | high | Not distributable as a normal app model |
+| OmniVoice | very broad language ambition | no accepted Android deployment | high | Research only |
+
+## Online services
+
+| Service | Authentication | Voice discovery / preview |
+| --- | --- | --- |
+| Edge Read Aloud | none | live locale catalog; unofficial endpoint |
+| ElevenLabs | API key | account voice catalog; metered preview |
+| xAI / Grok | API key | provider voices; metered preview |
+| OpenAI-compatible | API key, endpoint, model | configured endpoint |
+| Azure Speech | resource key and region/endpoint | Azure voice catalog |
+| Qwen / DashScope | API key, region, optional workspace | DashScope voices |
+| Google Cloud TTS | restricted API key or proxy | Google voice catalog |
+| Amazon Polly | SigV4, Cognito temporary credentials, or proxy | Polly voice catalog |
+| Deepgram, Cartesia, PlayHT, Resemble | provider credentials | provider-specific catalog |
+| Custom PCM | HTTPS endpoint and bearer token | configured voice ID |
+
 ## Build and install
 
 ```sh
@@ -118,6 +186,26 @@ silence trimming, adaptive buffering policy, routing, model management, text
 normalization, unsafe-output rejection, and system-TTS compatibility. On the development
 Samsung SM-G970F, Alan Low produced first audio in about 2.1 seconds cold and
 0.33 seconds warm while completing through Android's system TTS callback.
+
+### Galaxy S10 development benchmark
+
+The development phone is an SM-G970F (Exynos 9820, Android 12, about 5.5 GB
+usable RAM). RTF is generation time divided by generated audio duration; below
+1.0 is faster than realtime. These are engineering measurements, not upstream
+claims.
+
+| Model | Measurement | Storage / process observation | Reader conclusion |
+| --- | --- | --- | --- |
+| Piper Alan Low | ~2.1 s first audio cold; ~0.33 s warm | model-dependent | Best tested continuity |
+| Kitten Nano INT8 | ~2.95 s generation for ~3.70 s audio, RTF ~0.80 | ~45 MB installed in the tested package | Realtime-capable |
+| Pocket INT8, 3 steps | cold RTF ~1.35; warm first PCM ~243–262 ms | ~201 MB installed; Pocket-loaded process ~598 MB PSS | Works, but client request boundaries can remain audible |
+| Kokoro FP32 | ~6.06 s generation for ~3.16 s audio, RTF ~1.91 | ~408 MB installed | Too slow for seamless document reading on this phone |
+| MOSS INT8 | sustained RTF ~1.41–1.47 | test artifact removed | Rejected for this release |
+
+Measurements use short fixed passages after a clean install and again with a
+warm engine. Sustained reader acceptance also requires repeated section
+requests, cancellation, pause/resume, and thermal observation; a good first-PCM
+number alone is not sufficient.
 
 Opt-in large-model tests also download, checksum, initialize, synthesize, and
 exercise repeated provider requests. On that SM-G970F, progressive warm Pocket

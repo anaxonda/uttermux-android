@@ -17,8 +17,8 @@ class StreamingArchitectureTest {
     }
 
     @Test fun adaptivePolicyTradesLatencyForUnderrunProtection(){
-        val fast=AdaptiveBufferPolicy.startupMillis("balanced",0,.3,0)
-        val slow=AdaptiveBufferPolicy.startupMillis("balanced",0,1.4,2)
+        val fast=AdaptiveBufferPolicy.startupMillis("automatic",0,.3,0)
+        val slow=AdaptiveBufferPolicy.startupMillis("automatic",0,1.4,2)
         assertTrue(slow>fast)
         assertTrue(AdaptiveBufferPolicy.startupMillis("smooth",0,.3,0)>AdaptiveBufferPolicy.startupMillis("low",0,.3,0))
         assertEquals(1234,AdaptiveBufferPolicy.startupMillis("manual",1234,4.0,4))

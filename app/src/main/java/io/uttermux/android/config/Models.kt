@@ -48,6 +48,17 @@ data class ModelVariant(
     val capabilities:Set<String> = emptySet(),
 )
 
+data class VoiceProfile(
+    val id:String,
+    val name:String,
+    val language:String,
+    val engine:String,
+    val modelVersion:String,
+    val referenceFile:String,
+    val createdAt:Long,
+    val localOnly:Boolean=true,
+)
+
 data class VoiceChoice(
     val definition:VoiceDefinition,
     val variant:ModelVariant,

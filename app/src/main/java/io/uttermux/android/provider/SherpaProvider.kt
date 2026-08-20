@@ -101,7 +101,10 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
             val localeTag = item.getString("language").replace('_', '-'); val speakers = item.getInt("speakers")
             val downloadUrl = item.optString("download_url"); val checksum=item.optString("sha256"); val modelFile = item.getString("model_file")
             val downloadable=downloadUrl.isNotBlank()&&checksum.isNotBlank()
-            if (downloadable) manager.register(LocalModel(modelId,"vits",downloadUrl,checksum,modelFile))
+            if (downloadable) manager.register(LocalModel(modelId,"vits",downloadUrl,checksum,modelFile,
+                title="Piper ${item.getString("name")} ${item.getString("quality")}",family="Piper / VITS",
+                downloadSizeMb=(item.optLong("download_size")/1024/1024).toInt(),estimatedRamMb=((item.optLong("download_size")/1024/1024)*2+64).toInt(),
+                quantization="ONNX",performanceClass="fast",languages=setOf(localeTag),license=item.optString("license","Model-specific"),sourceUrl="https://github.com/rhasspy/piper"))
             val named = item.getJSONObject("speaker_ids"); val speakerPairs = if (named.length() > 0)
                 named.keys().asSequence().map { it to named.getInt(it) }.toList()
             else (0 until speakers.coerceAtLeast(1)).map { (if (speakers > 1) "speaker-$it" else item.getString("name")) to it }
@@ -119,7 +122,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     private fun allSpecs():List<Spec> = specs+pocketProfiles.profiles().map{profile->
         val model="sherpa-onnx-pocket-tts-int8-2026-01-26"
         Spec(VoiceRecord("sherpa/$model/custom-${profile.id}@${profile.language}","${profile.name} · Pocket",Locale.forLanguageTag(profile.language),ProviderIds.SHERPA,"Pocket TTS INT8",setOf(profile.language),false,
-            "User-created local voice profile",downloadId=model,approxSizeMb=176,license="Private reference recording",quantization="INT8",estimatedRamMb=420,performanceClass="balanced",capabilities=setOf("voice-cloning"),library="Pocket",modelVersion="2026-01 INT8"),model,0,profile.file)
+            "User-created local voice profile",downloadId=model,approxSizeMb=176,license="Private reference recording",quantization="INT8",estimatedRamMb=420,performanceClass="balanced",capabilities=setOf("voice-cloning"),library="Pocket",modelVersion="2026-01 INT8"),model,0,profile.referenceFile)
     }
     override val voices get()=allSpecs().map{it.voice}
     override val availableVoices get()=manager.installedIds().let{installed->allSpecs().filter{it.model in installed}.map{it.voice}}
@@ -214,7 +217,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     }
     private fun create(model:LocalModel,root:File,language:String):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath
-        val config=OfflineTtsModelConfig(numThreads=4)
+        val config=OfflineTtsModelConfig(numThreads=settings.engineThreads.takeIf{it>0}?:4)
         when(model.engine){
             "vits"->config.vits=OfflineTtsVitsModelConfig(model=path(model.model),tokens=path(model.tokens),dataDir=path(model.dataDir))
             "matcha"->config.matcha=OfflineTtsMatchaModelConfig(acousticModel=path(model.model),vocoder=path(model.secondaryFile),tokens=path(model.tokens),dataDir=path(model.dataDir),lexicon=path(model.lexicon))

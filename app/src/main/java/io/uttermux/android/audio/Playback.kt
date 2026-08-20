@@ -57,7 +57,12 @@ object Playback {
                 Log.d("UtterMuxPlayback","session=${System.identityHashCode(this)} acquired audio owner")
                 if(cancelled.get())return@withLock
                 val pending=mutableListOf<ByteArray>();var buffered=0;state(State.BUFFERING)
-                while(buffered<sampleRate*2*startupMs()/1000&&!cancelled.get()){
+                // A zero startup reserve means "start with the first chunk", not
+                // "start without asking the producer for audio". Preview playback
+                // deliberately uses a zero reserve, so always fetch at least one
+                // chunk before deciding that the stream is empty.
+                val startupBytes=(sampleRate*2L*startupMs()/1000L).coerceAtLeast(0L)
+                while((buffered==0||buffered<startupBytes)&&!cancelled.get()){
                     val chunk=next(100)?:if(generationDone())break else continue
                     if(chunk.isEmpty())break
                     pending+=chunk;buffered+=chunk.size

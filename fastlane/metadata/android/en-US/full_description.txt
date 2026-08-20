@@ -1,0 +1,5 @@
+UtterMux is a system-wide Android text-to-speech engine for readers and other
+apps. Download optional local voices, configure online providers, preview exact
+voices, route languages, and create private Pocket voice profiles. It bundles
+no voice model, contains no tracking, and includes a loopback compatibility
+bridge for KOReader.

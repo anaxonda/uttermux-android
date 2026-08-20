@@ -15,7 +15,7 @@ class AppSettings(context: Context) {
         get() = prefs.getString("theme", "system")!!
         set(value) { prefs.edit().putString("theme", value).apply() }
     var latencyProfile:String
-        get()=prefs.getString("latency_profile","balanced")!!
+        get()=prefs.getString("latency_profile","automatic")!!.let{if(it=="balanced")"automatic" else it}
         set(value){prefs.edit().putString("latency_profile",value).apply()}
     var manualStartupMs:Int
         get()=prefs.getInt("manual_startup_ms",300)
@@ -26,9 +26,13 @@ class AppSettings(context: Context) {
     var pocketNumSteps:Int
         get()=prefs.getInt("pocket_num_steps_v2",3)
         set(value){prefs.edit().putInt("pocket_num_steps_v2",value.coerceIn(3,5)).apply()}
+    var engineThreads:Int
+        get()=prefs.getInt("engine_threads",0)
+        set(value){prefs.edit().putInt("engine_threads",value.takeIf{it in setOf(1,2,4)}?:0).apply()}
     var paidPreviewConfirmed:Boolean
         get()=prefs.getBoolean("paid_preview_confirmed",false)
         set(value){prefs.edit().putBoolean("paid_preview_confirmed",value).apply()}
+    fun resetAdvanced(){prefs.edit().putString("latency_profile","automatic").putInt("manual_startup_ms",300).putInt("model_cache_size",1).putInt("pocket_num_steps_v2",3).putInt("engine_threads",0).apply()}
     fun route(language: String): String = prefs.getString("route.${Languages.normalized(language)}", "")!!
     fun setRoute(language: String, voice: String) = prefs.edit().putString("route.${Languages.normalized(language)}", voice).apply()
     fun routeChain(language:String):List<String> = prefs.getString("route_chain.${Languages.normalized(language)}","")!!.split('\n').filter(String::isNotBlank)
