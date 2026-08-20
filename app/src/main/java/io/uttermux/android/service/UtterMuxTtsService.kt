@@ -12,10 +12,14 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
 
 class UtterMuxTtsService : TextToSpeechService() {
     @Volatile private var cancelled = AtomicBoolean()
     private val router get() = UtterMuxApp.instance.router
+    private val warmExecutor=Executors.newSingleThreadExecutor()
+    private val warming=ConcurrentHashMap.newKeySet<String>()
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         val tag = Languages.fromAndroid(lang,country)
         if (router.availableVoices.none { v -> v.languages.any { Languages.matches(it, tag) } }) {
@@ -30,19 +34,36 @@ class UtterMuxTtsService : TextToSpeechService() {
     override fun onLoadLanguage(lang: String?, country: String?, variant: String?): Int = onIsLanguageAvailable(lang, country, variant)
     override fun onGetLanguage(): Array<String> = arrayOf("eng", "USA", "")
     override fun onGetVoices(): MutableList<Voice> {
+        val began=System.nanoTime()
         val ready=router.availableVoices
-        val specific=ready.flatMap{it.languages}.map(Languages::normalized)
-        val languages=(specific+specific.map{it.substringBefore('-')}).distinct()
+        // Android clients do not need the entire searchable provider catalog.
+        // Returning hundreds or thousands of Voice parcelables makes some
+        // readers perform expensive synchronous setup on their main thread.
+        // Expose compact language routers plus only user-selected concrete
+        // voices; the manager remains the place to browse every provider voice.
+        val languages=ready.asSequence().flatMap{it.languages.asSequence()}
+            .map(Languages::normalized).map{it.substringBefore('-')}.distinct().sorted().toList()
         val automatic=languages.map { language ->
             val candidates=router.candidates("uttermux:auto@$language",language)
             Voice("uttermux:auto@$language",Locale.forLanguageTag(language),Voice.QUALITY_HIGH,Voice.LATENCY_NORMAL,
                 candidates.isEmpty()||candidates.all{it.networkRequired},emptySet())
         }
-        return (automatic + ready.map { Voice(it.id, it.locale, Voice.QUALITY_HIGH, Voice.LATENCY_NORMAL, it.networkRequired, emptySet()) }).toMutableList()
+        val readyById=ready.associateBy{it.id}
+        val selected=(listOf(UtterMuxApp.instance.settings.defaultVoice)+UtterMuxApp.instance.settings.configuredRouteVoices())
+            .distinct().mapNotNull(readyById::get)
+            .map { Voice(it.id,it.locale,Voice.QUALITY_HIGH,Voice.LATENCY_NORMAL,it.networkRequired,emptySet()) }
+        return (automatic+selected).distinctBy{it.name}.toMutableList().also{
+            Log.i("UtterMuxTTS","system voice catalog: ${it.size} voices in ${(System.nanoTime()-began)/1_000_000}ms (${ready.size} ready in manager)")
+        }
     }
     override fun onIsValidVoiceName(voiceName: String?): Int = if (voiceName?.startsWith("uttermux:auto") == true || router.availableVoices.any{it.id==voiceName}) TextToSpeech.SUCCESS else TextToSpeech.ERROR
-    override fun onLoadVoice(voiceName: String?): Int = onIsValidVoiceName(voiceName).also{if(it==TextToSpeech.SUCCESS)Thread{router.warm(voiceName)}.start()}
-    override fun onGetDefaultVoiceNameFor(lang: String?, country: String?, variant: String?): String = "uttermux:auto@${Languages.fromAndroid(lang,country)}"
+    override fun onLoadVoice(voiceName: String?): Int = onIsValidVoiceName(voiceName).also{result->
+        if(result==TextToSpeech.SUCCESS&&!voiceName.isNullOrBlank()&&warming.add(voiceName))warmExecutor.execute{
+            try{router.warm(voiceName)}finally{warming.remove(voiceName)}
+        }
+    }
+    override fun onGetDefaultVoiceNameFor(lang: String?, country: String?, variant: String?): String = "uttermux:auto@${Languages.fromAndroid(lang,country).substringBefore('-')}"
+    override fun onDestroy(){warmExecutor.shutdownNow();super.onDestroy()}
     override fun onStop() { cancelled.set(true) }
     override fun onSynthesizeText(request: SynthesisRequest, callback: SynthesisCallback) {
         val signal = AtomicBoolean(); cancelled = signal

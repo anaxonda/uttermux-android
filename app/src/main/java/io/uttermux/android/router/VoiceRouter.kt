@@ -58,5 +58,12 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
         stream(route,text,speed,1f,cancelled){chunk->output.write(PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000));true}
         return AudioData(24_000,output.toByteArray())
     }
-    fun warm(voiceId:String?){voiceId?.let(::voice)?.let{voice->providers[voice.provider]?.warm(voice)}}
+    fun warm(voiceId:String?){
+        val selected=when {
+            voiceId.isNullOrBlank()->null
+            voiceId.startsWith("uttermux:auto@")->candidates(voiceId,voiceId.substringAfter('@')).firstOrNull()
+            else->voice(voiceId)
+        }
+        selected?.let{voice->providers[voice.provider]?.warm(voice)}
+    }
 }

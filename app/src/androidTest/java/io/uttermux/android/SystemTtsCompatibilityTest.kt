@@ -25,6 +25,7 @@ class SystemTtsCompatibilityTest {
             assertTrue("TTS initialization timed out",initialized.await(10,TimeUnit.SECONDS))
             assertEquals(TextToSpeech.SUCCESS,initStatus.get())
             assertTrue(tts.voices.any{it.name.startsWith("uttermux:auto@en")})
+            assertTrue("System voice catalog must remain compact; manager has full search",tts.voices.size<=128)
             assertTrue(tts.setLanguage(Locale.US)>=TextToSpeech.LANG_AVAILABLE)
             val finished=CountDownLatch(1);val error=AtomicInteger(0)
             tts.setOnUtteranceProgressListener(object:UtteranceProgressListener(){

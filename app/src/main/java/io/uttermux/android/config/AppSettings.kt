@@ -26,4 +26,8 @@ class AppSettings(context: Context) {
     fun setRoute(language: String, voice: String) = prefs.edit().putString("route.${Languages.normalized(language)}", voice).apply()
     fun routeChain(language:String):List<String> = prefs.getString("route_chain.${Languages.normalized(language)}","")!!.split('\n').filter(String::isNotBlank)
     fun setRouteChain(language:String,voices:List<String>)=prefs.edit().putString("route_chain.${Languages.normalized(language)}",voices.distinct().joinToString("\n")).apply()
+    fun configuredRouteVoices():List<String> = prefs.all.entries.asSequence()
+        .filter { it.key.startsWith("route.") || it.key.startsWith("route_chain.") }
+        .flatMap { it.value.toString().split('\n').asSequence() }
+        .filter(String::isNotBlank).distinct().toList()
 }
