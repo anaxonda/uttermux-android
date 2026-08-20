@@ -1,4 +1,4 @@
-// API-compatible wrapper for sherpa-onnx v1.13.4 (Apache-2.0).
+// API-compatible wrapper for sherpa-onnx v1.13.6 (Apache-2.0).
 package com.k2fsa.sherpa.onnx
 
 data class OfflineTtsVitsModelConfig(var model:String="",var lexicon:String="",var tokens:String="",var dataDir:String="",var dictDir:String="",var noiseScale:Float=.667f,var noiseScaleW:Float=.8f,var lengthScale:Float=1f)

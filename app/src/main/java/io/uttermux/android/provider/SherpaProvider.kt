@@ -93,27 +93,53 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     override val voices get()=specs.map{it.voice}
     override val availableVoices get()=manager.installedIds().let{installed->specs.filter{it.model in installed}.map{it.voice}}
     override fun isAvailable(voice:VoiceRecord)=specs.firstOrNull{it.voice.id==voice.id}?.let{runCatching{manager.installed(it.model)}.getOrDefault(false)}==true
-    private val engines=object:LinkedHashMap<String,OfflineTts>(3,.75f,true){ override fun removeEldestEntry(e:MutableMap.MutableEntry<String,OfflineTts>?):Boolean { val remove=size>settings.modelCacheSize;if(remove)e?.value?.release();return remove } }
+    private val runtimeLock=Any()
+    private val warmedReferences=mutableSetOf<String>()
+    private val engines=object:LinkedHashMap<String,OfflineTts>(3,.75f,true){
+        override fun removeEldestEntry(e:MutableMap.MutableEntry<String,OfflineTts>?):Boolean {
+            val remove=size>settings.modelCacheSize
+            if(remove&&e!=null){
+                e.value.release()
+                synchronized(warmedReferences){warmedReferences.removeAll{it.startsWith("${e.key}/")}}
+            }
+            return remove
+        }
+    }
     private data class Reference(val samples:FloatArray,val sampleRate:Int)
     private val references=mutableMapOf<String,Reference>()
     private fun engineKey(spec:Spec)="${spec.model}@${spec.voice.locale.toLanguageTag()}"
     private fun engine(spec:Spec):OfflineTts=synchronized(engines){engines.getOrPut(engineKey(spec)){create(manager.model(spec.model),File(manager.root,spec.model),spec.voice.locale.toLanguageTag())}}
     override fun strategy(voice:VoiceRecord):StreamStrategy=specs.firstOrNull{it.voice.id==voice.id}?.let{manager.model(it.model).engine}
         .let{if(it=="pocket"||it=="zipvoice")StreamStrategy.CODEC_ADAPTIVE else StreamStrategy.SEGMENTED_LOCAL}
-    override fun warm(voice:VoiceRecord){specs.firstOrNull{it.voice.id==voice.id}?.takeIf{manager.installed(it.model)}?.let(::engine)}
+    override fun warm(voice:VoiceRecord){
+        val spec=specs.firstOrNull{it.voice.id==voice.id}?.takeIf{manager.installed(it.model)}?:return
+        synchronized(runtimeLock){
+            val tts=engine(spec)
+            if(manager.model(spec.model).engine!="pocket"||spec.referenceFile.isBlank())return@synchronized
+            val key="${engineKey(spec)}/${spec.referenceFile}"
+            if(!warmedReferences.add(key))return@synchronized
+            try{
+            // Populate sherpa's reference-embedding cache without generating a
+            // full throwaway sentence. One latent frame is enough to pass through
+            // reference encoding and keeps asynchronous voice loading cheap.
+            val config=generationConfig(spec,1f)
+            config.extra=(config.extra.orEmpty()+mapOf("max_frames" to "1","chunk_size" to "1"))
+            tts.generateWithConfig("Ready.",config)
+            }catch(error:Throwable){warmedReferences.remove(key);throw error}
+        }
+    }
     override fun synthesize(voice:VoiceRecord,text:String,language:String,speed:Float,cancelled:AtomicBoolean):AudioData {
         val spec=specs.first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
-        val tts=engine(spec)
         if(cancelled.get())throw InterruptedException()
-        val generated=tts.generateWithConfig(text,generationConfig(spec,speed))
+        val generated=synchronized(runtimeLock){engine(spec).generateWithConfig(text,generationConfig(spec,speed))}
         val bytes=ByteArray(generated.samples.size*2);generated.samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();bytes[i*2]=sample.toByte();bytes[i*2+1]=(sample shr 8).toByte()}
         return AudioData(generated.sampleRate,bytes)
     }
     override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean) {
         val voice=session.voice
         val spec=specs.first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
-        val tts=engine(spec);var sequence=0
-        for(segment in TextSegmenter.split(text)) {
+        var sequence=0
+        synchronized(runtimeLock){val tts=engine(spec);for(segment in TextSegmenter.split(text)) {
             if(cancelled.get())throw InterruptedException()
             val began=System.nanoTime()
             if(manager.model(spec.model).engine=="vits") {
@@ -129,7 +155,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
                 if(cancelled.get())throw InterruptedException()
                 if(!callbackUsed&&!emit(AudioChunk(pcm(generated.samples),generated.sampleRate,segment.range,sequence++,System.nanoTime()-began)))return
             }
-        }
+        }}
     }
     private fun pcm(samples:FloatArray):ByteArray {
         val bytes=ByteArray(samples.size*2);samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();bytes[i*2]=sample.toByte();bytes[i*2+1]=(sample shr 8).toByte()};return bytes
@@ -143,7 +169,15 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
                 val lo=audio.pcm16[i*2].toInt() and 255;val hi=audio.pcm16[i*2+1].toInt();((hi shl 8 or lo).toShort()/32768f)
             },audio.sampleRate)
         }}
-        return GenerationConfig(speed=speed,sid=spec.speaker,referenceAudio=reference.samples,referenceSampleRate=reference.sampleRate,numSteps=settings.pocketNumSteps)
+        // Pocket's native decoder can now emit PCM before latent generation
+        // finishes. Keep a smaller startup window for the fast preset and a
+        // little more reserve for the slower, higher-quality presets.
+        val chunkSize=when(settings.pocketNumSteps){
+            3->4
+            4->10
+            else->15
+        }
+        return GenerationConfig(speed=speed,sid=spec.speaker,referenceAudio=reference.samples,referenceSampleRate=reference.sampleRate,numSteps=settings.pocketNumSteps,extra=mapOf("chunk_size" to chunkSize.toString()))
     }
     private fun create(model:LocalModel,root:File,language:String):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath

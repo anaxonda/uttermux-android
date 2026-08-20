@@ -1,0 +1,110 @@
+diff --git a/sherpa-onnx/csrc/offline-tts-pocket-impl.h b/sherpa-onnx/csrc/offline-tts-pocket-impl.h
+index c8e30a5..ee25b0c 100644
+--- a/sherpa-onnx/csrc/offline-tts-pocket-impl.h
++++ b/sherpa-onnx/csrc/offline-tts-pocket-impl.h
+@@ -358,8 +358,30 @@ class OfflineTtsPocketImpl : public OfflineTtsImpl {
+     Ort::Value eos_logit{nullptr};
+ 
+     std::vector<float> latent_list;
++    std::vector<float> audio_list;
+     int32_t eos_step = -1;
+     int32_t frame_size = -1;
++    int32_t chunk_size = gen_config.GetExtraInt("chunk_size", 15);
++    if (chunk_size <= 0) {
++      chunk_size = 15;
++    }
++    int32_t decoded_frames = 0;
++    auto decoder_state = model_->GetMimiDecoderInitState();
++    auto decode_pending = [&](int32_t this_chunk_size, float progress) {
++      std::array<int64_t, 3> chunk_shape = {1, this_chunk_size, frame_size};
++      float *p = latent_list.data() + decoded_frames * frame_size;
++      Ort::Value chunk_tensor = Ort::Value::CreateTensor(
++          memory_info, p, this_chunk_size * frame_size, chunk_shape.data(),
++          chunk_shape.size());
++      Ort::Value out = RunMimiDecoder(std::move(chunk_tensor), decoder_state);
++      auto n = out.GetTensorTypeAndShapeInfo().GetShape().back();
++      if (callback) {
++        should_continue = callback(out.GetTensorData<float>(), n, progress);
++      }
++      audio_list.insert(audio_list.end(), out.GetTensorData<float>(),
++                        out.GetTensorData<float>() + n);
++      decoded_frames += this_chunk_size;
++    };
+     for (int32_t step = 0; step < max_frames; ++step) {
+       Ort::Value cur_tensor =
+           Ort::Value::CreateTensor(memory_info, cur.data(), cur.size(),
+@@ -391,55 +413,30 @@ class OfflineTtsPocketImpl : public OfflineTtsImpl {
+ 
+       latent_list.insert(latent_list.end(), latent.GetTensorData<float>(),
+                          latent.GetTensorData<float>() + n);
+-    }
+-
+-    lm_main_state.values.clear();
+-
+-    auto decoder_state = model_->GetMimiDecoderInitState();
+-
+-    int32_t chunk_size = gen_config.GetExtraInt("chunk_size", 15);
+ 
+-    int32_t num_chunks = latent_list.size() / frame_size / chunk_size;
+-    std::array<int64_t, 3> chunk_shape = {1, chunk_size, frame_size};
+-
+-    std::vector<float> audio_list;
+-
+-    int32_t remaining_chunks =
+-        (latent_list.size() - num_chunks * chunk_size * frame_size) /
+-        frame_size;
+-
+-    const float *p = latent_list.data();
+-    for (int32_t i = 0;
+-         (p < latent_list.data() + latent_list.size()) && should_continue;
+-         ++i) {
+-      int32_t this_chunk_size = chunk_size;
+-      if (i >= num_chunks) {
+-        this_chunk_size = remaining_chunks;
++      // Upstream used to generate every latent before invoking the decoder,
++      // so its "streaming" callback could not produce first audio until the
++      // complete sentence was ready. Decode bounded chunks while generation
++      // is still in progress. The Mimi state preserves continuity across
++      // chunks and a false callback return now cancels generation promptly.
++      int32_t pending_frames = latent_list.size() / frame_size - decoded_frames;
++      if (callback && pending_frames >= chunk_size) {
++        decode_pending(chunk_size,
++                       static_cast<float>(step + 1) / max_frames);
++        if (!should_continue) {
++          break;
++        }
+       }
++    }
+ 
+-      chunk_shape[1] = this_chunk_size;
+-
+-      Ort::Value chunk_tensor = Ort::Value::CreateTensor(
+-          memory_info, const_cast<float *>(p), this_chunk_size * frame_size,
+-          chunk_shape.data(), chunk_shape.size());
+-
+-      p += this_chunk_size * frame_size;
+-
+-      Ort::Value out = RunMimiDecoder(std::move(chunk_tensor), decoder_state);
+-
+-      auto n = out.GetTensorTypeAndShapeInfo().GetShape().back();
++    lm_main_state.values.clear();
+ 
+-      if (callback) {
+-        should_continue =
+-            callback(out.GetTensorData<float>(), n,
+-                     (i + 1) * 1.0 / (num_chunks + !!remaining_chunks));
+-        // Caution(fangjun): out is freed when the callback returns, so users
+-        // should copy the data if they want to access the data after
+-        // the callback returns to avoid segmentation fault.
++    while (should_continue && frame_size > 0) {
++      int32_t pending_frames = latent_list.size() / frame_size - decoded_frames;
++      if (pending_frames <= 0) {
++        break;
+       }
+-
+-      audio_list.insert(audio_list.end(), out.GetTensorData<float>(),
+-                        out.GetTensorData<float>() + n);
++      decode_pending(std::min(chunk_size, pending_frames), 1.0f);
+     }
+ 
+     GeneratedAudio ans;

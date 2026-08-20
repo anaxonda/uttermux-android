@@ -61,12 +61,35 @@ class LargeModelIntegrationTest {
     @Test fun pocketSequentialStreamRequests(){
         val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice));val provider=app.providers.first{it.id==voice.provider};provider.warm(voice);val old=app.settings.pocketNumSteps
         try{for(steps in 3..5){app.settings.pocketNumSteps=steps;repeat(3){index->
-            val began=android.os.SystemClock.elapsedRealtime();var firstAt=0L;var bytes=0
+            val began=android.os.SystemClock.elapsedRealtime();var firstAt=0L;var previousAt=0L;var previousAudioMs=0L;var worstDeficitMs=Long.MIN_VALUE;var chunks=0;var bytes=0
             provider.stream(provider.prepare(voice,"en-US"),"Section ${index+1}. This resembles a short document-reader paragraph.",1f,1f,AtomicBoolean()){chunk->
-                if(firstAt==0L)firstAt=android.os.SystemClock.elapsedRealtime();bytes+=chunk.pcm16.size;true
+                val now=android.os.SystemClock.elapsedRealtime()
+                if(firstAt==0L)firstAt=now
+                if(previousAt>0)worstDeficitMs=maxOf(worstDeficitMs,now-previousAt-previousAudioMs)
+                previousAt=now;previousAudioMs=(chunk.pcm16.size/2L*1000/chunk.sampleRate);chunks++;bytes+=chunk.pcm16.size;true
             }
-            assertTrue(bytes>0);Log.i("UtterMuxLargeTest","Pocket steps=$steps request=${index+1}: first PCM ${firstAt-began}ms, complete ${android.os.SystemClock.elapsedRealtime()-began}ms")
+            assertTrue(bytes>0);Log.i("UtterMuxLargeTest","Pocket steps=$steps request=${index+1}: first PCM ${firstAt-began}ms, complete ${android.os.SystemClock.elapsedRealtime()-began}ms, chunks=$chunks, worst callback deficit=${worstDeficitMs.coerceAtLeast(0)}ms")
         }}}finally{app.settings.pocketNumSteps=old}
+    }
+
+    @Test fun pocketStopsAfterRejectedFirstChunk(){
+        val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice));val provider=app.providers.first{it.id==voice.provider}
+        provider.warm(voice);val began=android.os.SystemClock.elapsedRealtime();var chunks=0
+        provider.stream(provider.prepare(voice,"en-US"),"This deliberately long Pocket request must stop as soon as its first audio chunk is rejected by the Android caller, rather than finishing the entire sentence in the background.",1f,1f,AtomicBoolean()){
+            chunks++;false
+        }
+        val elapsed=android.os.SystemClock.elapsedRealtime()-began
+        assertEquals("Cancellation must stop after the rejected callback",1,chunks)
+        assertTrue("Pocket callback cancellation took ${elapsed}ms",elapsed<3_000)
+        Log.i("UtterMuxLargeTest","Pocket callback cancellation completed in ${elapsed}ms")
+    }
+
+    @Test fun installedConventionalSherpaVoiceStillSynthesizes(){
+        val voice=app.router.availableVoices.firstOrNull{it.provider=="sherpa"&&it.model!="Pocket TTS INT8"}
+            ?:return
+        val began=android.os.SystemClock.elapsedRealtime()
+        val audio=app.router.synthesizeExact(voice.id,"The conventional local speech engine still works after the native streaming update.",voice.locale.toLanguageTag(),1f,AtomicBoolean())
+        verify(voice.name,audio,began)
     }
 
     private fun install(id:String){
