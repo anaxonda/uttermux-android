@@ -35,9 +35,10 @@ object Playback {
             if(finished.get()||cancelled.get())return
             paused.set(true);runCatching{player?.pause()};state(State.PAUSED)
         }
-        fun resume(){
-            if(finished.get()||cancelled.get())return
+        fun resume():Boolean {
+            if(finished.get()||cancelled.get())return false
             paused.set(false);synchronized(monitor){monitor.notifyAll()};runCatching{player?.play()};state(State.PLAYING)
+            return true
         }
         fun stop(){
             if(finished.getAndSet(true))return
@@ -81,7 +82,13 @@ object Playback {
                         if(!awaitResume())return false
                         val wanted=minOf(4096,chunk.size-offset)
                         val count=track.write(chunk,offset,wanted,AudioTrack.WRITE_BLOCKING)
-                        if(count<=0)return false
+                        // AudioTrack may return zero or an error when pause()
+                        // interrupts a blocking write. That is not end-of-stream:
+                        // wait for resume and retry the same bytes.
+                        if(count<=0){
+                            if(paused.get()){if(!awaitResume())return false;continue}
+                            return false
+                        }
                         offset+=count;writtenFrames+=count/2;onProgress(playedFrames().coerceAtMost(writtenFrames))
                     }
                     return !cancelled.get()

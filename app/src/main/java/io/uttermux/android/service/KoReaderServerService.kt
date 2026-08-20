@@ -65,7 +65,7 @@ class KoReaderServerService:Service(){
                     respond(output,200,handle)
                 }
                 method=="POST"&&path in setOf("/play","/resume")->{val clip=fresh(json.getString("handle"));startOrResume(clip);respond(output,200,"")}
-                method=="POST"&&path=="/pause"->{val clip=find(json.getString("handle"));clip.playback?.pause();clip.state=ClipState.PAUSED;respond(output,200,"")}
+                method=="POST"&&path=="/pause"->{pause(find(json.getString("handle")));respond(output,200,"")}
                 method=="POST"&&path=="/stop"->{findOrNull(json.optString("handle"))?.let(::cancel);respond(output,200,"")}
                 method=="POST"&&path=="/remaining"->{
                     val clip=find(json.getString("handle"));val remaining=if(clip.state in setOf(ClipState.FINISHED,ClipState.STOPPED,ClipState.ERROR))0.0 else clip.queuedSeconds.coerceAtLeast(.02)
@@ -92,7 +92,11 @@ class KoReaderServerService:Service(){
     private fun startOrResume(clip:StreamClip)=synchronized(clip){
         when(clip.state){
             ClipState.PLAYING,ClipState.BUFFERING->return
-            ClipState.PAUSED->{clip.playback?.resume();clip.state=ClipState.PLAYING;return}
+            ClipState.PAUSED->{
+                check(clip.playback?.resume()==true){"Paused playback session has already ended"}
+                clip.state=ClipState.PLAYING
+                return
+            }
             ClipState.FINISHED->return
             ClipState.STOPPED,ClipState.ERROR->error("Handle is no longer playable")
             else->Unit
@@ -107,6 +111,12 @@ class KoReaderServerService:Service(){
             }})
         clip.playback=session;clip.state=ClipState.BUFFERING
         workPool.execute{try{session.run()}catch(error:Throwable){clip.error=error.message.orEmpty();clip.state=ClipState.ERROR}finally{if(clip.state!=ClipState.PAUSED)VoiceActivity.idle()}}
+    }
+    private fun pause(clip:StreamClip)=synchronized(clip){
+        if(clip.state in setOf(ClipState.BUFFERING,ClipState.PLAYING,ClipState.PAUSED)){
+            clip.playback?.pause()
+            clip.state=ClipState.PAUSED
+        }
     }
     private fun generate(clip:StreamClip){workPool.execute{
         val diagnostic=Diagnostics.request("koreader ${clip.handle} chars=${clip.text.length}")

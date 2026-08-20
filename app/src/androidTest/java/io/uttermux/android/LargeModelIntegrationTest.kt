@@ -103,6 +103,25 @@ class LargeModelIntegrationTest {
         }finally{context.stopService(android.content.Intent(context,io.uttermux.android.service.KoReaderServerService::class.java));app.settings.defaultVoice=old}
     }
 
+    @Test fun koReaderPocketBridgePausesAndResumes(){
+        val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice))
+        val old=app.settings.defaultVoice;app.settings.defaultVoice=voice.id
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        context.startForegroundService(android.content.Intent(context,io.uttermux.android.service.KoReaderServerService::class.java))
+        try{
+            Thread.sleep(750)
+            val text="Pocket Alba reads a sufficiently long section so the bridge can pause after playback starts, preserve the active stream, and continue from that same request when playback resumes."
+            val handle=post("/",JSONObject().put("text",text).put("language","en-US").put("length_scale",1.0).toString())
+            val body=JSONObject().put("handle",handle).toString();post("/play",body)
+            awaitState(handle,setOf("playing"),20_000)
+            post("/pause",body);assertEquals("paused",awaitState(handle,setOf("paused"),2_000).getString("state"))
+            Thread.sleep(350);assertEquals("Pause must remain stable until resume","paused",state(handle).getString("state"))
+            post("/play",body);awaitState(handle,setOf("playing","finished"),3_000)
+            val finished=awaitState(handle,setOf("finished"),20_000)
+            assertTrue("KOReader pause/resume error: ${finished.optString("error")}",finished.optString("error").isBlank())
+        }finally{context.stopService(android.content.Intent(context,io.uttermux.android.service.KoReaderServerService::class.java));app.settings.defaultVoice=old}
+    }
+
     @Test fun installedConventionalSherpaVoiceStillSynthesizes(){
         val voice=app.router.availableVoices.firstOrNull{it.provider=="sherpa"&&it.model!="Pocket TTS INT8"}
             ?:return
@@ -123,6 +142,14 @@ class LargeModelIntegrationTest {
             output.write("POST $path HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray());output.write(bytes);output.flush()
             val response=socket.getInputStream().bufferedReader().readText();assertTrue(response.startsWith("HTTP/1.1 200"));response.substringAfter("\r\n\r\n")
         }
+    }
+    private fun state(handle:String)=JSONObject(post("/remaining",JSONObject().put("handle",handle).toString()))
+    private fun awaitState(handle:String,expected:Set<String>,timeoutMs:Long):JSONObject{
+        val deadline=android.os.SystemClock.elapsedRealtime()+timeoutMs
+        var latest=state(handle)
+        while(android.os.SystemClock.elapsedRealtime()<deadline&&latest.optString("state") !in expected){Thread.sleep(100);latest=state(handle)}
+        assertTrue("Expected $expected but bridge was ${latest.optString("state")}: ${latest.optString("error")}",latest.optString("state") in expected)
+        return latest
     }
     private fun verify(name:String,audio:AudioData,began:Long){
         assertTrue("$name sample rate ${audio.sampleRate}",audio.sampleRate>=16_000)

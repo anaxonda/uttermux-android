@@ -45,19 +45,24 @@
  	text = text:gsub("%s+", " ")
  	return text
  end
-@@ -1094,10 +1073,11 @@
+@@ -1094,10 +1073,12 @@
  		if unschedule_remaining ~= nil then
  			unschedule_remaining()
  		end
 +		local endpoint = playback_promise.pause_requested and "/pause" or "/stop"
- 		ffiutil.runInSubProcess(function()
+-		ffiutil.runInSubProcess(function()
 -			local code2, _ = self:request_server(body, "/stop")
-+			local code2, _ = self:request_server(body, endpoint)
- 			if code2 ~= 200 then
+-			if code2 ~= 200 then
 -				logger.err("TTS: could not stop playback. Is the TTS server down?")
-+				logger.err("TTS: could not change playback state. Is the TTS server down?")
- 			end
- 		end)
+-			end
+-		end)
++		-- Pause and stop are tiny localhost control requests. Keep them ordered:
++		-- returning before the server acknowledges a pause lets a subsequent Play
++		-- overtake it, after which the stale pause wins and leaves playback stuck.
++		local code2, _ = self:request_server(body, endpoint)
++		if code2 ~= 200 then
++			logger.err("TTS: could not change playback state. Is the TTS server down?")
++		end
  	end
 @@ -1153,8 +1133,9 @@
  	return item.handle_promise
