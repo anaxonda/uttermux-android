@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
     fun saveRoute(next:List<String>){chain=next;app.settings.setRouteChain(language,next);routeRevision++;onStatus("Saved ${Languages.normalized(language)} fallback chain")}
     val routeChoices=remember(routesOpen,language,revision){if(routesOpen)app.router.voices.filter{it.languages.any{tag->Languages.matches(tag,language)}}else emptyList()}
     val installed=remember(revision){app.models.models.filter{runCatching{app.models.installed(it.id)}.getOrDefault(false)}}
+    val hardware=remember{HardwareAdvisor.detect(app)}
 
     var latency by remember{mutableStateOf(app.settings.latencyProfile)};var startup by remember{mutableStateOf(app.settings.manualStartupMs.toString())};var pocketSteps by remember{mutableStateOf(app.settings.pocketNumSteps.toString())};var cache by remember{mutableStateOf(app.settings.modelCacheSize.toString())};var threads by remember{mutableStateOf(app.settings.engineThreads.toString())};var report by remember{mutableStateOf("")}
     fun saveAdvanced(){app.settings.latencyProfile=latency;app.settings.manualStartupMs=startup.toIntOrNull()?:300;app.settings.pocketNumSteps=pocketSteps.toIntOrNull()?:3;app.settings.modelCacheSize=cache.toIntOrNull()?:1;app.settings.engineThreads=threads.toIntOrNull()?:0;app.providers.forEach{it.trimMemory()};onStatus("Advanced playback settings saved")}
@@ -90,7 +91,13 @@ import kotlinx.coroutines.withContext
         }
 
         item{SettingsSectionButton("Diagnostics",diagnosticsOpen){diagnosticsOpen=!diagnosticsOpen}}
-        if(diagnosticsOpen){item{Text(app.adaptiveBuffers.snapshot().ifBlank{"No timing samples yet. Effective reserves appear after playback."},style=MaterialTheme.typography.bodySmall)};item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={report=Diagnostics.report()}){Text("Refresh report")};OutlinedButton(onClick={Diagnostics.clear();report=""}){Text("Clear")}}};item{Text(if(report.isBlank())"No requests recorded" else report,style=MaterialTheme.typography.bodySmall)}}
+        if(diagnosticsOpen){
+            item{Text("${hardware.architecture} · ${hardware.logicalCores} logical CPU cores · ${hardware.totalRamMb} MB RAM (${hardware.availableRamMb} MB currently available) · inference: ${hardware.inferenceProviders.joinToString()}",style=MaterialTheme.typography.bodySmall)}
+            item{Text(app.adaptiveBuffers.snapshot().ifBlank{"No timing samples yet. Effective reserves appear after playback."},style=MaterialTheme.typography.bodySmall)}
+            item{Text("Reports contain timing, voice IDs, character counts, and redacted errors. They do not include spoken document text or credentials.",style=MaterialTheme.typography.bodySmall)}
+            item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={report=Diagnostics.report()}){Text("Refresh report")};OutlinedButton(onClick={Diagnostics.clear();report=""}){Text("Clear")}}}
+            item{Text(if(report.isBlank())"No requests recorded" else report,style=MaterialTheme.typography.bodySmall)}
+        }
 
         item{SettingsSectionButton("About and privacy",aboutOpen){aboutOpen=!aboutOpen}}
         if(aboutOpen)item{Card{Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){Text("UtterMux ${BuildConfig.VERSION_NAME}");Text("GPL-3.0-or-later · application ID io.uttermux.android",style=MaterialTheme.typography.bodySmall);Text("Local voice profiles and API credentials stay on this device. Credentials are encrypted and excluded from backup. Model downloads are explicit and checksum verified.",style=MaterialTheme.typography.bodySmall)}}}

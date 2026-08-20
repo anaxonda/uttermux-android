@@ -120,7 +120,6 @@ class KoReaderServerService:Service(){
     }
     private fun generate(clip:StreamClip){workPool.execute{
         val diagnostic=Diagnostics.request("koreader ${clip.handle} chars=${clip.text.length}")
-        Diagnostics.record(diagnostic,"text",TextNormalizer.diagnosticSnippet(clip.text))
         try{
             val controller=app.adaptiveBuffers.controller(clip.route.primary.voice.id)
             app.router.stream(clip.route,clip.text,clip.speed,1f,clip.cancelled,onCandidate={chosen->VoiceActivity.speaking(chosen.id,clip.route.language,"KOReader",if(chosen.id!=clip.route.primary.voice.id)"Primary voice failed; using fallback" else "")}){chunk->

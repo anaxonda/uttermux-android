@@ -16,5 +16,8 @@ object Diagnostics {
     }
     @Synchronized fun recent():List<DiagnosticEvent> = events.toList()
     @Synchronized fun clear(){events.clear()}
-    fun report():String=recent().joinToString("\n"){"${it.atMillis}\t#${it.requestId}\t${it.name}\t${it.detail}"}
+    private fun safe(value:String)=value
+        .replace(Regex("(?i)(api[-_ ]?key|token|secret|authorization)([=: ]+)[^\\s,;]+"),"\$1\$2[redacted]")
+        .take(300)
+    fun report():String=recent().joinToString("\n"){"${it.atMillis}\t#${it.requestId}\t${it.name}\t${safe(it.detail)}"}
 }

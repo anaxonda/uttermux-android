@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -153,7 +154,8 @@ private data class Suggestion(val value:String,val label:String)
 }
 
 @Composable private fun VoiceCard(voice:VoiceRecord,service:String,catalogReady:Boolean,selected:Boolean,onDefault:()->Unit,onChanged:()->Unit,onStatus:(String)->Unit){
-    val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();val localId=voice.downloadId.ifBlank{voice.takeIf{it.provider==ProviderIds.SHERPA}?.id?.split('/')?.getOrNull(1).orEmpty()}
+    val app=UtterMuxApp.instance;val context=LocalContext.current;val scope=rememberCoroutineScope();val localId=voice.downloadId.ifBlank{voice.takeIf{it.provider==ProviderIds.SHERPA}?.id?.split('/')?.getOrNull(1).orEmpty()}
+    val advice=remember(voice.id,voice.estimatedRamMb,voice.performanceClass,voice.networkRequired){HardwareAdvisor.recommend(context,voice)}
     var installed by remember(voice.id){mutableStateOf(localId.isBlank()&&app.router.isAvailable(voice)||localId.isNotBlank()&&runCatching{app.models.installed(localId)}.getOrDefault(false))}
     var repairNeeded by remember(voice.id,installed){mutableStateOf(installed&&localId.isNotBlank()&&runCatching{app.models.needsRepair(localId)}.getOrDefault(false))}
     var confirmPaid by remember{mutableStateOf(false)}
@@ -164,8 +166,9 @@ private data class Suggestion(val value:String,val label:String)
     }.onSuccess{onStatus(PreviewController.state.value.message)}.onFailure{onStatus("Preview unavailable: ${it.message}")}}}
     Card(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
         Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(voice.name,style=MaterialTheme.typography.titleSmall);Text("$service · ${voice.model} · ${voice.languages.joinToString()}",style=MaterialTheme.typography.bodySmall);if(voice.description.isNotBlank())Text(voice.description,style=MaterialTheme.typography.bodySmall)};RadioButton(selected,onClick=onDefault,enabled=ready)}
-        val facts=listOf(voice.quantization,voice.approxSizeMb.takeIf{it>0}?.let{"$it MB"}.orEmpty(),voice.estimatedRamMb.takeIf{it>0}?.let{"~$it MB RAM"}.orEmpty(),voice.performanceClass.takeUnless{it=="unknown"}.orEmpty(),voice.license).filter(String::isNotBlank)
+        val facts=listOf(voice.quantization,voice.approxSizeMb.takeIf{it>0}?.let{"$it MB"}.orEmpty(),voice.estimatedRamMb.takeIf{it>0}?.let{"~$it MB RAM"}.orEmpty(),voice.performanceClass.takeUnless{it=="unknown"}.orEmpty(),advice.label,voice.license).filter(String::isNotBlank)
         if(facts.isNotEmpty())Text(facts.joinToString(" · "),style=MaterialTheme.typography.labelSmall)
+        if(!voice.networkRequired)Text(advice.reason,style=MaterialTheme.typography.bodySmall,modifier=Modifier.semantics{contentDescription="Hardware recommendation: ${advice.label}. ${advice.reason}"})
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
             AssistChip(onClick={},label={Text(if(ready)"Ready" else if(voice.downloadable&&localId.isNotBlank())"Downloadable" else "Setup required")})
             TextButton(enabled=canPreview||previewActive,onClick={if(previewActive){PreviewController.stop();onStatus("Preview stopped")}else if(voice.networkRequired&&voice.provider!=ProviderIds.EDGE&&!app.settings.paidPreviewConfirmed)confirmPaid=true else doPreview()}){Text(if(previewActive)"Stop" else if(voice.networkRequired&&voice.provider!=ProviderIds.EDGE)"Preview · may cost" else if(canPreview)"Preview" else "Install to preview")}
