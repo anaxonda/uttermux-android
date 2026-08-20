@@ -29,5 +29,11 @@ the repository binaries. This is a release blocker, not a scanner exception.
 - Reproduce the signed release from the tag and archive native-library hashes.
 - Update fastlane descriptions, screenshots, changelog, and privacy policy.
 
+The normal CI workflow verifies the checked-in development JNI hashes, builds
+the application, runs unit tests and lint, and rejects APKs containing model
+weights, voice recordings, credential directories, or obvious key patterns.
+That protects ordinary development builds but does not replace the F-Droid
+source build of the two JNI libraries.
+
 Model downloads are user-initiated data downloads. Every entry must show its
 size and license before download and must be verified by SHA-256.
