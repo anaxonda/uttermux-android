@@ -16,6 +16,15 @@ class StreamingArchitectureTest {
         assertTrue(segments.first().text.length<=360)
     }
 
+    @Test fun pocketSizedSegmentationBreaksTheReaderPassageAtSentenceBoundaries(){
+        val text="MISTER HANEDA WAS senior to Mister Omochi, who was senior to Mister Saito, who was senior to Miss Mori, who was senior to me, I was senior to no one. You could put this another way. I took orders from Miss Mori, who took orders from Mister Saito, and so on up the ladder; of course, orders that came down could jump a level or two"
+        val segments=TextSegmenter.split(text,firstTarget=100,nextTarget=120,maxChars=165)
+        assertEquals(text,segments.joinToString(""){it.text})
+        assertTrue(segments.size>=3)
+        assertTrue(segments[0].text.endsWith("no one."))
+        assertTrue(segments.all{it.text.length<=165})
+    }
+
     @Test fun adaptivePolicyTradesLatencyForUnderrunProtection(){
         val fast=AdaptiveBufferPolicy.startupMillis("automatic",0,.3,0)
         val slow=AdaptiveBufferPolicy.startupMillis("automatic",0,1.4,2)
