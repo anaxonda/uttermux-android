@@ -58,6 +58,18 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
         stream(route,text,speed,1f,cancelled){chunk->output.write(PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000));true}
         return AudioData(24_000,output.toByteArray())
     }
+    fun synthesizeExact(voiceId:String,text:String,language:String,speed:Float,cancelled:AtomicBoolean):AudioData {
+        val selected=requireNotNull(voice(voiceId)){"Voice is no longer in the catalog: $voiceId"}
+        val provider=requireNotNull(providers[selected.provider]){"Provider is unavailable: ${selected.provider}"}
+        require(provider.isAvailable(selected)){"${provider.descriptor.name} is not configured or this voice is not installed"}
+        val session=provider.prepare(selected,language)
+        val output=ByteArrayOutputStream()
+        provider.stream(session,text,speed,1f,cancelled){chunk->
+            output.write(PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000));!cancelled.get()
+        }
+        check(output.size()>0){"${provider.descriptor.name} returned no preview audio"}
+        return AudioData(24_000,output.toByteArray())
+    }
     fun warm(voiceId:String?){
         val selected=when {
             voiceId.isNullOrBlank()->null
