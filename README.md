@@ -74,11 +74,15 @@ waits for a complete passage before hearing audio.
 
 Only runnable voices appear in the voice catalog; research and compatibility
 notes are documentation, not dead UI rows. Local models are optional downloads.
-Pocket reuses one runtime/model with per-voice licensed reference WAV files.
-MOSS-TTS-Nano downloads approximately 760 MB and uses its official ONNX graphs,
-a native-compatible SentencePiece implementation, incremental token generation,
-and overlapping codec decoding. MOSS remains a heavy option and needs acceptance
-testing on each device class before sustained document reading.
+Pocket reuses one runtime/model with cached, per-voice licensed reference WAV
+files. Its 3/4/5-step quality selector trades generation latency for refinement;
+three steps is the measured low-latency default. MOSS-TTS-Nano downloads about
+685 MB and uses its official ONNX graphs, a native-compatible SentencePiece
+implementation, semantic long-text chunks, incremental token generation, and a
+stateful streaming codec with mobile-sized adaptive batches. Existing MOSS
+downloads show an **Update model** action for the additional streaming graph.
+MOSS remains a heavy option and needs acceptance testing on each device class
+before sustained document reading.
 
 Qwen, Audio8, Chatterbox, NeuTTS, LEMAS, X-Voice, and OmniVoice are intentionally
 not advertised in the app until an arm64 runtime passes system-TTS, cancellation,
@@ -113,14 +117,18 @@ Samsung SM-G970F, Alan Low produced first audio in about 2.1 seconds cold and
 0.33 seconds warm while completing through Android's system TTS callback.
 
 Opt-in large-model tests also download, checksum, initialize, synthesize, and
-complete through Android's real `TextToSpeech` API. On that SM-G970F, Pocket
-occupies 198 MB and directly generated 3.76 seconds of audio in 4.51 seconds;
-its cold system request reached first audio in 3.14 seconds. MOSS occupies
-684 MB and generated 3.2 seconds in 9.81 seconds; its cold system request took
-7.35 seconds to first audio and 11.94 seconds overall. MOSS is therefore
-functional on this phone but not suitable for uninterrupted live reading;
-Pocket is much closer to usable real time. These tests are excluded from the
-ordinary suite because they consume substantial bandwidth, storage, and time.
+exercise repeated provider requests. On that SM-G970F, warm Pocket at three
+steps produced first PCM in about 1.15–1.20 seconds, compared with roughly
+1.42–1.78 seconds at four steps and 1.75–2.01 seconds at five. Because readers
+such as Librera submit the next section only after the previous Android TTS
+request completes, that per-request generation time still becomes an audible
+section gap; UtterMux cannot pre-generate text the client has not supplied.
+MOSS occupies 684 MB. Stateful codec decoding, mobile batching, and separate
+4-thread generation/2-thread codec pools reduced the measured cold 3.2-second
+sample from 14.64 to 10.79 seconds. It is functional but still about 3.4 times
+slower than real time on this phone, so it is not suitable for uninterrupted
+live reading there. These tests are excluded from the ordinary suite because
+they consume substantial bandwidth, storage, and time.
 
 The project is GPL-3.0-or-later. The pinned sherpa-onnx JNI wrapper and native
 libraries are Apache-2.0 components from k2-fsa; individual voice/model licenses

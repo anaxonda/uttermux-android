@@ -61,6 +61,11 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
     var locality by remember{mutableStateOf("all")};var readiness by remember{mutableStateOf("all")};var defaultVoice by remember(revision){mutableStateOf(app.settings.defaultVoice)}
     val effectiveDefault=remember(revision,defaultVoice){app.router.effectiveDefault()};val configuredReady=remember(revision,defaultVoice){app.router.voice(defaultVoice)?.let(app.router::isAvailable)==true}
     val all=remember(revision){app.router.voices};val providerNames=remember(revision){app.router.providerDescriptors.associate{it.id to it.name}};fun contains(value:String,query:String)=query.isBlank()||value.contains(query,true)
+    val languageOptions=remember(revision){all.flatMap{it.languages}.distinct().sortedWith(compareBy({java.util.Locale.forLanguageTag(it).getDisplayLanguage(java.util.Locale.ENGLISH)},{it})).map{tag->
+        val locale=java.util.Locale.forLanguageTag(tag);Suggestion(tag,listOf(locale.getDisplayLanguage(java.util.Locale.ENGLISH),locale.getDisplayCountry(java.util.Locale.ENGLISH).takeIf(String::isNotBlank),tag).filterNotNull().joinToString(" · "))
+    }}
+    val providerOptions=remember(revision){app.router.providerDescriptors.map{Suggestion(it.id,it.name)}}
+    val modelOptions=all.filter{voice->contains("${voice.provider} ${providerNames[voice.provider].orEmpty()}",providerSearch)&&contains(voice.languages.joinToString(" "){Languages.searchableName(it)},languageSearch)}.map{it.model}.distinct().sorted().map{Suggestion(it,it)}
     val shown=all.filter{voice->
         val ready=app.router.isAvailable(voice)
         contains(listOf(voice.name,voice.accent,voice.gender,voice.description).joinToString(" "),voiceSearch)&&
@@ -73,9 +78,9 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
         if(!configuredReady&&effectiveDefault!=null)item{Card{Text("Configured default is unavailable. Currently using ${effectiveDefault.name}; the saved preference will be restored automatically if its provider becomes available.",Modifier.padding(12.dp))}}
         item{Text("Find a voice",style=MaterialTheme.typography.titleMedium)}
         item{SearchField("Voice or accent",voiceSearch){voiceSearch=it}}
-        item{SearchField("Language",languageSearch){languageSearch=it}}
-        item{SearchField("Provider",providerSearch){providerSearch=it}}
-        item{SearchField("Model family or variant",modelSearch){modelSearch=it}}
+        item{SuggestionSearchField("Language",languageSearch,languageOptions){languageSearch=it}}
+        item{SuggestionSearchField("Provider",providerSearch,providerOptions){providerSearch=it;modelSearch=""}}
+        item{SuggestionSearchField("Model family or variant",modelSearch,modelOptions){modelSearch=it}}
         item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Location",locality,listOf("all","offline","online")){locality=it}};Box(Modifier.weight(1f)){Selector("Availability",readiness,listOf("all","ready","downloadable")){readiness=it}}}}
         item{Text("${shown.size} of ${all.size} voices",style=MaterialTheme.typography.bodySmall)}
         items(shown,key={it.id}){voice->VoiceCard(voice,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},{onStatus(it)})}
@@ -84,9 +89,21 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
 
 @Composable private fun SearchField(label:String,value:String,onValue:(String)->Unit)=OutlinedTextField(value,onValue,Modifier.fillMaxWidth().heightIn(min=56.dp),label={Text(label)},singleLine=true)
 
+private data class Suggestion(val value:String,val label:String)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun SuggestionSearchField(label:String,value:String,options:List<Suggestion>,onValue:(String)->Unit){
+    var expanded by remember{mutableStateOf(false)}
+    val matches=options.filter{value.isBlank()||it.value.contains(value,true)||it.label.contains(value,true)}.take(30)
+    ExposedDropdownMenuBox(expanded&&matches.isNotEmpty(),{expanded=it}){
+        OutlinedTextField(value,{onValue(it);expanded=true},Modifier.fillMaxWidth().heightIn(min=56.dp).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),label={Text(label)},singleLine=true,trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
+        ExposedDropdownMenu(expanded&&matches.isNotEmpty(),{expanded=false}){matches.forEach{item->DropdownMenuItem(text={Text(item.label)},onClick={onValue(item.value);expanded=false})}}
+    }
+}
+
 @Composable private fun VoiceCard(voice:VoiceRecord,selected:Boolean,onDefault:()->Unit,onChanged:()->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();val localId=voice.downloadId.ifBlank{voice.takeIf{it.provider==ProviderIds.SHERPA}?.id?.split('/')?.getOrNull(1).orEmpty()}
     var installed by remember(voice.id){mutableStateOf(localId.isBlank()&&app.router.isAvailable(voice)||localId.isNotBlank()&&runCatching{app.models.installed(localId)}.getOrDefault(false))}
+    var repairNeeded by remember(voice.id,installed){mutableStateOf(installed&&localId.isNotBlank()&&runCatching{app.models.needsRepair(localId)}.getOrDefault(false))}
     val ready=if(localId.isNotBlank())installed else app.router.isAvailable(voice);val canRemotePreview=voice.previewUrl.isNotBlank();val canPreview=ready||canRemotePreview
     Card(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
         Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(voice.name,style=MaterialTheme.typography.titleSmall);Text("${voice.provider} · ${voice.model} · ${voice.languages.joinToString()}",style=MaterialTheme.typography.bodySmall);if(voice.description.isNotBlank())Text(voice.description,style=MaterialTheme.typography.bodySmall)};RadioButton(selected,onClick=onDefault,enabled=ready)}
@@ -100,6 +117,7 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
         }
         if(localId.isNotBlank())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
             if(!installed&&voice.downloadable)Button(onClick={scope.launch{onStatus("Downloading $localId…");runCatching{withContext(Dispatchers.IO){app.models.install(localId)}}.onSuccess{installed=true;onChanged();onStatus("Installed ${voice.name}")}.onFailure{onStatus("Install failed: ${it.message}")}}}){Text("Download")}
+            if(installed&&repairNeeded)Button(onClick={scope.launch{onStatus("Updating $localId…");runCatching{withContext(Dispatchers.IO){app.models.repair(localId)}}.onSuccess{repairNeeded=false;onChanged();onStatus("Updated ${voice.model}")}.onFailure{onStatus("Update failed: ${it.message}")}}}){Text("Update model")}
             if(installed)OutlinedButton(onClick={if(app.models.delete(localId)){installed=false;if(selected)app.settings.defaultVoice="uttermux:auto@en";onChanged();onStatus("Deleted ${voice.model}")}}){Text("Delete model")}
         }
         if(voice.attribution.isNotBlank())Text(voice.attribution,style=MaterialTheme.typography.labelSmall)
@@ -109,7 +127,8 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
 @Composable private fun SettingsPage(revision:Int,theme:String,onTheme:(String)->Unit,onRefresh:()->Unit,onChanged:()->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance;val clipboard=LocalClipboardManager.current;val values=remember{mutableStateMapOf<String,String>()};var providersOpen by remember{mutableStateOf(false)};var routesOpen by remember{mutableStateOf(false)};var storageOpen by remember{mutableStateOf(false)};var diagnosticsOpen by remember{mutableStateOf(false)}
     var language by remember{mutableStateOf("en-US")};var selected by remember{mutableStateOf("")};var routeRevision by remember{mutableIntStateOf(0)};var chain by remember(language,routeRevision,revision){mutableStateOf(app.settings.routeChain(language))}
-    var koReader by remember{mutableStateOf(app.settings.koReaderEnabled)};var profile by remember{mutableStateOf(app.settings.latencyProfile)};var startup by remember{mutableStateOf(app.settings.manualStartupMs.toString())};var cache by remember{mutableStateOf(app.settings.modelCacheSize.toString())};var report by remember{mutableStateOf(Diagnostics.report())}
+    fun pocketLabel(steps:Int)=when(steps){3->"Fast · 3 steps";5->"Highest quality · 5 steps";else->"Balanced · 4 steps"}
+    var koReader by remember{mutableStateOf(app.settings.koReaderEnabled)};var profile by remember{mutableStateOf(app.settings.latencyProfile)};var pocketQuality by remember{mutableStateOf(pocketLabel(app.settings.pocketNumSteps))};var startup by remember{mutableStateOf(app.settings.manualStartupMs.toString())};var cache by remember{mutableStateOf(app.settings.modelCacheSize.toString())};var report by remember{mutableStateOf(Diagnostics.report())}
     LaunchedEffect(revision){app.router.providerDescriptors.flatMap{it.credentialFields}.forEach{values[it.key]=app.secure.get(it.key)}}
     fun saveRoute(next:List<String>){chain=next;app.settings.setRouteChain(language,next);routeRevision++;onStatus("Saved ${Languages.normalized(language)} fallback chain")}
     val choices=app.router.voices.filter{it.languages.any{tag->Languages.matches(tag,language)}}
@@ -118,9 +137,10 @@ private enum class Page(val label:String){VOICES("Voices"),SETTINGS("Settings")}
         item{Text("Appearance and playback",style=MaterialTheme.typography.titleMedium)}
         item{Selector("Theme",theme,listOf("system","light","dark"),onTheme)}
         item{Selector("Latency profile",profile,listOf("automatic","low","balanced","smooth","manual")){profile=it;app.settings.latencyProfile=it}}
+        item{Selector("Pocket quality / latency",pocketQuality,listOf(pocketLabel(3),pocketLabel(4),pocketLabel(5))){pocketQuality=it;app.settings.pocketNumSteps=it.substringAfter("· ").substringBefore(' ').toInt()}}
         item{OutlinedTextField(startup,{startup=it.filter(Char::isDigit)},Modifier.fillMaxWidth(),label={Text("Manual startup buffer (ms)")},singleLine=true)}
         item{OutlinedTextField(cache,{cache=it.filter(Char::isDigit)},Modifier.fillMaxWidth(),label={Text("Loaded model cache (1–3)")},singleLine=true)}
-        item{Button(onClick={app.settings.manualStartupMs=startup.toIntOrNull()?:300;app.settings.modelCacheSize=cache.toIntOrNull()?:1;onStatus("Playback settings saved")}){Text("Save playback settings")}}
+        item{Button(onClick={app.settings.manualStartupMs=startup.toIntOrNull()?:300;app.settings.modelCacheSize=cache.toIntOrNull()?:1;app.settings.pocketNumSteps=pocketQuality.substringAfter("· ").substringBefore(' ').toIntOrNull()?:3;onStatus("Playback settings saved")}){Text("Save playback settings")}}
         item{Row(verticalAlignment=Alignment.CenterVertically){Switch(koReader,{enabled->koReader=enabled;app.settings.koReaderEnabled=enabled;val intent=Intent(app,KoReaderServerService::class.java);if(enabled)app.startForegroundService(intent)else app.stopService(intent)});Spacer(Modifier.width(8.dp));Column{Text("KOReader bridge");Text("127.0.0.1:5000",style=MaterialTheme.typography.bodySmall)}}}
 
         item{SectionButton("Online providers",providersOpen){providersOpen=!providersOpen}}

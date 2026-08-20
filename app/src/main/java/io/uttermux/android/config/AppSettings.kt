@@ -22,6 +22,9 @@ class AppSettings(context: Context) {
     var modelCacheSize:Int
         get()=prefs.getInt("model_cache_size",1)
         set(value){prefs.edit().putInt("model_cache_size",value.coerceIn(1,3)).apply()}
+    var pocketNumSteps:Int
+        get()=prefs.getInt("pocket_num_steps_v2",3)
+        set(value){prefs.edit().putInt("pocket_num_steps_v2",value.coerceIn(3,5)).apply()}
     fun route(language: String): String = prefs.getString("route.${Languages.normalized(language)}", "")!!
     fun setRoute(language: String, voice: String) = prefs.edit().putString("route.${Languages.normalized(language)}", voice).apply()
     fun routeChain(language:String):List<String> = prefs.getString("route_chain.${Languages.normalized(language)}","")!!.split('\n').filter(String::isNotBlank)

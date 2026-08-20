@@ -94,7 +94,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     override val availableVoices get()=manager.installedIds().let{installed->specs.filter{it.model in installed}.map{it.voice}}
     override fun isAvailable(voice:VoiceRecord)=specs.firstOrNull{it.voice.id==voice.id}?.let{runCatching{manager.installed(it.model)}.getOrDefault(false)}==true
     private val engines=object:LinkedHashMap<String,OfflineTts>(3,.75f,true){ override fun removeEldestEntry(e:MutableMap.MutableEntry<String,OfflineTts>?):Boolean { val remove=size>settings.modelCacheSize;if(remove)e?.value?.release();return remove } }
-    private val references=mutableMapOf<String,AudioData>()
+    private data class Reference(val samples:FloatArray,val sampleRate:Int)
+    private val references=mutableMapOf<String,Reference>()
     private fun engineKey(spec:Spec)="${spec.model}@${spec.voice.locale.toLanguageTag()}"
     private fun engine(spec:Spec):OfflineTts=synchronized(engines){engines.getOrPut(engineKey(spec)){create(manager.model(spec.model),File(manager.root,spec.model),spec.voice.locale.toLanguageTag())}}
     override fun strategy(voice:VoiceRecord):StreamStrategy=specs.firstOrNull{it.voice.id==voice.id}?.let{manager.model(it.model).engine}
@@ -135,14 +136,14 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     }
     private fun generationConfig(spec:Spec,speed:Float):GenerationConfig {
         if(spec.referenceFile.isBlank())return GenerationConfig(speed=speed,sid=spec.speaker)
-        val audio=synchronized(references){references.getOrPut("${spec.model}/${spec.referenceFile}"){
+        val reference=synchronized(references){references.getOrPut("${spec.model}/${spec.referenceFile}"){
             val file=File(File(manager.root,spec.model),spec.referenceFile);require(file.isFile){"Pocket preset audio is missing; reinstall the model"}
-            CompressedAudioDecoder.decode(context,file.readBytes(),"wav")
+            val audio=CompressedAudioDecoder.decode(context,file.readBytes(),"wav")
+            Reference(FloatArray(audio.pcm16.size/2){i->
+                val lo=audio.pcm16[i*2].toInt() and 255;val hi=audio.pcm16[i*2+1].toInt();((hi shl 8 or lo).toShort()/32768f)
+            },audio.sampleRate)
         }}
-        val floats=FloatArray(audio.pcm16.size/2){i->
-            val lo=audio.pcm16[i*2].toInt() and 255;val hi=audio.pcm16[i*2+1].toInt();((hi shl 8 or lo).toShort()/32768f)
-        }
-        return GenerationConfig(speed=speed,sid=spec.speaker,referenceAudio=floats,referenceSampleRate=audio.sampleRate)
+        return GenerationConfig(speed=speed,sid=spec.speaker,referenceAudio=reference.samples,referenceSampleRate=reference.sampleRate,numSteps=settings.pocketNumSteps)
     }
     private fun create(model:LocalModel,root:File,language:String):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath

@@ -24,8 +24,9 @@ class MossRuntime(private val root:File,threads:Int=4):Closeable {
     private val ttsMeta=JSONObject(File(ttsDir,manifest.getJSONObject("model_files").getString("tts_meta")).readText())
     private val codecMeta=JSONObject(File(codecDir,"codec_browser_onnx_meta.json").readText());private val cfg=manifest.getJSONObject("tts_config")
     private val options=OrtSession.SessionOptions().apply{setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);setIntraOpNumThreads(threads.coerceIn(1,6));setInterOpNumThreads(1)}
+    private val codecOptions=OrtSession.SessionOptions().apply{setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);setIntraOpNumThreads(2);setInterOpNumThreads(1)}
     private val prefill=session(ttsDir,ttsMeta.getJSONObject("files").getString("prefill"));private val decode=session(ttsDir,ttsMeta.getJSONObject("files").getString("decode_step"))
-    private val localFrame=session(ttsDir,ttsMeta.getJSONObject("files").getString("local_fixed_sampled_frame"));private val codec=session(codecDir,codecMeta.getJSONObject("files").getString("decode_full"))
+    private val localFrame=session(ttsDir,ttsMeta.getJSONObject("files").getString("local_fixed_sampled_frame"));private val codec=session(codecDir,codecMeta.getJSONObject("files").getString("decode_step"),codecOptions)
     private val tokenizer=MossSentencePiece(File(ttsDir,manifest.getJSONObject("model_files").getString("tokenizer_model")))
     val voices:List<String> = (manifest.optJSONArray("builtin_voices")?:JSONArray()).objects().map{it.optString("voice")}.filter{it.isNotBlank()&&it!="Trump"}
     val sampleRate=codecMeta.getJSONObject("codec_config").getInt("sample_rate")
@@ -34,20 +35,24 @@ class MossRuntime(private val root:File,threads:Int=4):Closeable {
         val ids=tokenizer.encode(text);require(ids.isNotEmpty()){ "MOSS received empty text" };val inputs=buildRows(ids,voice);val initial=prefill(inputs)
         val queue=ArrayBlockingQueue<IntArray>(64);val finished=AtomicBoolean();val failure=AtomicReference<Throwable?>()
         val producer=Thread({try{decode(initial,cancelled){frame->while(!cancelled.get())if(queue.offer(frame,50,TimeUnit.MILLISECONDS))return@decode true;false}}catch(t:Throwable){failure.set(t)}finally{finished.set(true)}},"uttermux-moss-generator").apply{start()}
-        val frames=mutableListOf<IntArray>();var emittedSamples=0;var last=System.nanoTime()
+        val pending=mutableListOf<IntArray>();var emittedSamples=0L;var firstAudioAt=0L;var last=System.nanoTime();val codecState=CodecState()
         try{
             while(!finished.get()||queue.isNotEmpty()){
-                val frame=queue.poll(50,TimeUnit.MILLISECONDS);if(frame!=null)frames+=frame
-                val shouldDecode=frames.isNotEmpty()&&(frames.size%16==0||finished.get()&&queue.isEmpty())
-                if(shouldDecode){val audio=decodeAudio(frames);if(audio.size>emittedSamples){val now=System.nanoTime();val chunk=audio.copyOfRange(emittedSamples,audio.size);emittedSamples=audio.size;if(!emit(MossPcm(chunk,sampleRate,now-last))){cancelled.set(true);break};last=now}}
+                val frame=queue.poll(20,TimeUnit.MILLISECONDS);if(frame!=null)pending+=frame
+                val budget=decodeBudget(emittedSamples,firstAudioAt)
+                val force=finished.get()&&queue.isEmpty()
+                if(pending.isNotEmpty()&&(force||pending.size>=budget)){
+                    val count=if(force)pending.size else min(pending.size,budget);val batch=pending.subList(0,count).map{it.copyOf()};pending.subList(0,count).clear()
+                    val audio=codecState.decode(batch);if(audio.isNotEmpty()){val now=System.nanoTime();if(firstAudioAt==0L)firstAudioAt=now;emittedSamples+=audio.size;if(!emit(MossPcm(audio,sampleRate,now-last))){cancelled.set(true);break};last=now}
+                }
                 if(cancelled.get())throw InterruptedException()
             }
             failure.get()?.let{throw it};require(emittedSamples>0){"MOSS generated no audio"}
-        }finally{cancelled.takeIf{it.get()}?.let{producer.interrupt()};producer.join(1000)}
+        }finally{codecState.close();cancelled.takeIf{it.get()}?.let{producer.interrupt()};producer.join(1000)}
     }
 
-    override fun close(){codec.close();localFrame.close();decode.close();prefill.close();options.close()}
-    private fun session(dir:File,name:String):OrtSession{val file=File(dir,name);require(file.isFile){"Missing MOSS file: ${file.name}"};return env.createSession(file.absolutePath,options)}
+    override fun close(){codec.close();localFrame.close();decode.close();prefill.close();codecOptions.close();options.close()}
+    private fun session(dir:File,name:String,sessionOptions:OrtSession.SessionOptions=options):OrtSession{val file=File(dir,name);require(file.isFile){"Missing MOSS file: ${file.name}"};return env.createSession(file.absolutePath,sessionOptions)}
     private data class Inputs(val rows:Array<IntArray>,val mask:IntArray)
     private data class Initial(val hidden:OnnxTensor,val length:Int,val past:OrtSession.Result)
     private fun buildRows(text:IntArray,voice:String):Inputs{
@@ -83,13 +88,49 @@ class MossRuntime(private val root:File,threads:Int=4):Closeable {
             localFrame.run(mapOf("global_hidden" to hidden,"repetition_seen_mask" to seenTensor,"assistant_random_u" to assistantTensor,"audio_random_u" to audioTensor)).use{result->if(result.tensor("should_continue").ints().firstOrNull()!=1)return null;return result.tensor("frame_token_ids").ints()}
         }}}
     }
-    private fun decodeAudio(frames:List<IntArray>):FloatArray{
-        val n=cfg.getInt("n_vq");val flat=IntArray(frames.size*n);var offset=0;frames.forEach{row->repeat(n){flat[offset++]=row[it]}}
-        OnnxTensor.createTensor(env,IntBuffer.wrap(flat),longArrayOf(1,frames.size.toLong(),n.toLong())).use{codes->OnnxTensor.createTensor(env,IntBuffer.wrap(intArrayOf(frames.size)),longArrayOf(1)).use{lengths->
-            codec.run(mapOf("audio_codes" to codes,"audio_code_lengths" to lengths)).use{result->
-                val raw=result.tensor("audio").value as Array<*>;val batch=raw[0] as Array<*>;val channels=batch.map{it as FloatArray};val reported=result.tensor("audio_lengths").ints().first();val length=min(reported,channels.minOf{it.size});return FloatArray(length){i->channels.sumOf{it[i].toDouble()}.toFloat()/channels.size}
+    private fun decodeBudget(emittedSamples:Long,firstAudioAt:Long):Int{
+        // One-frame decoding is low latency on desktop but ORT/JNI overhead
+        // dominates on mobile CPUs, so begin with 640 ms of codec frames.
+        if(firstAudioAt==0L)return 8
+        val lead=emittedSamples.toDouble()/sampleRate-(System.nanoTime()-firstAudioAt)/1_000_000_000.0
+        return when{lead<0.20->4;lead<0.55->4;lead<1.10->8;else->12}
+    }
+    private inner class CodecState:Closeable{
+        private val initial=linkedMapOf<String,OnnxTensor>();private var previous:OrtSession.Result?=null
+        private val transformerSpecs=codecMeta.optJSONObject("streaming_decode")?.optJSONArray("transformer_offsets")?.objects().orEmpty()
+        private val attentionSpecs=codecMeta.optJSONObject("streaming_decode")?.optJSONArray("attention_caches")?.objects().orEmpty()
+        init{
+            require(transformerSpecs.isNotEmpty()&&attentionSpecs.isNotEmpty()){ "MOSS model does not include streaming codec state metadata" }
+            transformerSpecs.forEach{spec->initial[spec.getString("input_name")]=intTensor(spec.getJSONArray("shape"),0)}
+            attentionSpecs.forEach{spec->
+                initial[spec.getString("offset_input_name")]=intTensor(spec.getJSONArray("offset_shape"),0)
+                initial[spec.getString("cached_keys_input_name")]=floatTensor(spec.getJSONArray("cache_shape"))
+                initial[spec.getString("cached_values_input_name")]=floatTensor(spec.getJSONArray("cache_shape"))
+                initial[spec.getString("cached_positions_input_name")]=intTensor(spec.getJSONArray("positions_shape"),-1)
             }
-        }}
+        }
+        fun decode(frames:List<IntArray>):FloatArray{
+            val n=cfg.getInt("n_vq");val flat=IntArray(frames.size*n);var offset=0;frames.forEach{row->repeat(n){flat[offset++]=row[it]}}
+            OnnxTensor.createTensor(env,IntBuffer.wrap(flat),longArrayOf(1,frames.size.toLong(),n.toLong())).use{codes->OnnxTensor.createTensor(env,IntBuffer.wrap(intArrayOf(frames.size)),longArrayOf(1)).use{lengths->
+                val feeds=linkedMapOf<String,OnnxTensorLike>("audio_codes" to codes,"audio_code_lengths" to lengths);val prior=previous
+                if(prior==null)feeds.putAll(initial) else{
+                    transformerSpecs.forEach{feeds[it.getString("input_name")]=prior.tensor(it.getString("output_name"))}
+                    attentionSpecs.forEach{spec->
+                        feeds[spec.getString("offset_input_name")]=prior.tensor(spec.getString("offset_output_name"))
+                        feeds[spec.getString("cached_keys_input_name")]=prior.tensor(spec.getString("cached_keys_output_name"))
+                        feeds[spec.getString("cached_values_input_name")]=prior.tensor(spec.getString("cached_values_output_name"))
+                        feeds[spec.getString("cached_positions_input_name")]=prior.tensor(spec.getString("cached_positions_output_name"))
+                    }
+                }
+                val next=codec.run(feeds);previous=next;if(prior==null)initial.values.forEach{it.close()};prior?.close()
+                val raw=next.tensor("audio").value as Array<*>;val batch=raw[0] as Array<*>;val channels=batch.map{it as FloatArray};val reported=next.tensor("audio_lengths").ints().first();val length=min(reported,channels.minOf{it.size})
+                return FloatArray(length){i->channels.sumOf{it[i].toDouble()}.toFloat()/channels.size}
+            }}
+        }
+        private fun shape(value:JSONArray)=LongArray(value.length()){value.getLong(it)}
+        private fun intTensor(shape:JSONArray,fill:Int):OnnxTensor{val dims=shape(shape);val data=IntArray(dims.fold(1L){a,b->a*b}.toInt()){fill};return OnnxTensor.createTensor(env,IntBuffer.wrap(data),dims)}
+        private fun floatTensor(shape:JSONArray):OnnxTensor{val dims=shape(shape);val data=FloatArray(dims.fold(1L){a,b->a*b}.toInt());return OnnxTensor.createTensor(env,FloatBuffer.wrap(data),dims)}
+        override fun close(){previous?.close();previous=null;initial.values.forEach{runCatching{it.close()}};initial.clear()}
     }
     private fun lastHidden(tensor:OnnxTensor):OnnxTensor{val shape=tensor.info.shape;val hidden=if(shape.size==2)(tensor.value as Array<*>)[0] as FloatArray else ((tensor.value as Array<*>)[0] as Array<*>).last() as FloatArray;return OnnxTensor.createTensor(env,FloatBuffer.wrap(hidden.copyOf()),longArrayOf(1,hidden.size.toLong()))}
     private fun OrtSession.Result.tensor(name:String)=get(name).orElseThrow{IllegalStateException("Missing MOSS output $name")} as OnnxTensor

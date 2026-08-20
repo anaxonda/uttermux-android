@@ -42,6 +42,7 @@ class ModelManager(private val context: Context) {
             RemoteAsset("MOSS-TTS-Nano-100M-ONNX/moss_tts_local_shared.data","https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main/moss_tts_local_shared.data","bae7782032c0fb12490ab42afe009f87ae6c75a0f0596fc7b5c08e4d5ee93916"),
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/codec_browser_onnx_meta.json","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/codec_browser_onnx_meta.json","3e291c883bb7d11ff2fe8e964e3e495519760358859f35c951254c7741592731"),
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_full.onnx","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_full.onnx","0fbbafe3fd4afa2a019af5c5ced204af6e2d1db044fa40f021525d2aee95b4ac"),
+            RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_step.onnx","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_step.onnx","9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"),
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_shared.data","e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"),
         )),
     ).forEach(::register) }
@@ -49,6 +50,14 @@ class ModelManager(private val context: Context) {
     fun register(model:LocalModel) { synchronized(modelsById) { modelsById[model.id] = model } }
     fun model(id:String)=synchronized(modelsById) { modelsById[id] ?: error("Unknown model $id") }
     fun installed(id:String)=File(root,id).resolve(model(id).model).isFile
+    fun needsRepair(id:String):Boolean {val model=model(id);return installed(id)&&model.assets.any{!File(File(root,id),it.file).isFile}}
+    fun repair(id:String,progress:(String)->Unit={},cancelled:()->Boolean={false}){
+        val model=model(id);require(installed(id)){"Install $id first"};val destination=File(root,id).canonicalFile
+        model.assets.filter{!File(destination,it.file).isFile}.forEach{asset->
+            progress("Downloading ${asset.file}");val target=File(destination,asset.file).canonicalFile;require(target.path.startsWith(destination.path+File.separator)){"Unsafe model asset path"};target.parentFile?.mkdirs()
+            downloadVerified(asset.url,target,asset.sha256,cancelled,"Asset ${asset.file}")
+        }
+    }
     fun installedIds():Set<String> = models.mapNotNull { model -> model.id.takeIf { File(root,it).resolve(model.model).isFile } }.toSet()
     fun delete(id:String):Boolean {
         val target=File(root,id).canonicalFile;require(target.parentFile==root.canonicalFile){"Unsafe model path"}

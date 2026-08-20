@@ -26,7 +26,7 @@ class UtterMuxApp : Application() {
             CustomPcmProvider(secure),
         )
         router=VoiceRouter(settings,providers)
-        CoroutineScope(SupervisorJob()+Dispatchers.IO).launch { refreshCatalogs();router.warm(settings.defaultVoice) }
+        CoroutineScope(SupervisorJob()+Dispatchers.IO).launch { refreshCatalogs();router.warm(router.effectiveDefault()?.id) }
     }
     fun refreshCatalogs(): List<String> {
         val errors=mutableListOf<String>()

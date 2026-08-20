@@ -47,6 +47,28 @@ class LargeModelIntegrationTest {
         ).forEach(::speakThroughAndroid)
     }
 
+    @Test fun pocketQualityAndWarmRequestBenchmark(){
+        val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice));val old=app.settings.pocketNumSteps
+        try{
+            for(steps in 3..5){
+                app.settings.pocketNumSteps=steps;val began=android.os.SystemClock.elapsedRealtime()
+                val audio=app.router.synthesizeExact(voice.id,"A short Pocket benchmark measures startup delay and speech generation speed.","en-US",1f,AtomicBoolean())
+                verify("Pocket-$steps-steps",audio,began)
+            }
+        }finally{app.settings.pocketNumSteps=old}
+    }
+
+    @Test fun pocketSequentialStreamRequests(){
+        val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice));val provider=app.providers.first{it.id==voice.provider};provider.warm(voice);val old=app.settings.pocketNumSteps
+        try{for(steps in 3..5){app.settings.pocketNumSteps=steps;repeat(3){index->
+            val began=android.os.SystemClock.elapsedRealtime();var firstAt=0L;var bytes=0
+            provider.stream(provider.prepare(voice,"en-US"),"Section ${index+1}. This resembles a short document-reader paragraph.",1f,1f,AtomicBoolean()){chunk->
+                if(firstAt==0L)firstAt=android.os.SystemClock.elapsedRealtime();bytes+=chunk.pcm16.size;true
+            }
+            assertTrue(bytes>0);Log.i("UtterMuxLargeTest","Pocket steps=$steps request=${index+1}: first PCM ${firstAt-began}ms, complete ${android.os.SystemClock.elapsedRealtime()-began}ms")
+        }}}finally{app.settings.pocketNumSteps=old}
+    }
+
     private fun install(id:String){
         if(app.models.installed(id)){Log.i("UtterMuxLargeTest","$id already installed");return}
         val began=android.os.SystemClock.elapsedRealtime()
