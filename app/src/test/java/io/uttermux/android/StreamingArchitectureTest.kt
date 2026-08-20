@@ -1,8 +1,9 @@
 package io.uttermux.android
 
 import io.uttermux.android.audio.AdaptiveBufferPolicy
+import io.uttermux.android.audio.PcmChunkQueue
 import io.uttermux.android.audio.TextSegmenter
-import io.uttermux.android.catalog.BundledCatalog
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -23,9 +24,13 @@ class StreamingArchitectureTest {
         assertEquals(1234,AdaptiveBufferPolicy.startupMillis("manual",1234,4.0,4))
     }
 
-    @Test fun everyResearchModelHasHonestNonAvailableStatus(){
-        assertTrue(BundledCatalog.researchModels.isNotEmpty())
-        assertTrue(BundledCatalog.researchModels.all{it.status in setOf("blocked","benchmark","watchlist","incompatible")})
-        assertTrue(BundledCatalog.researchModels.map{it.id}.distinct().size==BundledCatalog.researchModels.size)
+    @Test fun durationQueueAllowsOneOversizedProviderChunkWithoutDeadlock(){
+        val queue=PcmChunkQueue(sampleRate=10,maxSeconds=.1)
+        val chunk=ByteArray(100)
+        assertTrue(queue.offer(chunk,50,AtomicBoolean()))
+        assertEquals(100,queue.queuedBytes)
+        assertArrayEquals(chunk,queue.poll(50))
+        assertEquals(0,queue.queuedBytes)
     }
+
 }

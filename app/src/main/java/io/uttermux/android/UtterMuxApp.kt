@@ -7,21 +7,22 @@ import android.speech.tts.TextToSpeech
 import io.uttermux.android.config.*
 import io.uttermux.android.provider.*
 import io.uttermux.android.router.VoiceRouter
+import io.uttermux.android.audio.AdaptiveBufferRegistry
 import kotlinx.coroutines.*
 
 class UtterMuxApp : Application() {
     lateinit var secure: SecureStore; lateinit var settings: AppSettings; lateinit var router: VoiceRouter; lateinit var models: ModelManager
+    lateinit var adaptiveBuffers:AdaptiveBufferRegistry;private set
     lateinit var providers:List<TtsProvider>;private set
     override fun onCreate() {
         super.onCreate(); instance = this
         secure = SecureStore(this); settings = AppSettings(this)
-        models=ModelManager(this)
+        models=ModelManager(this);adaptiveBuffers=AdaptiveBufferRegistry(settings)
         providers=listOf(
-            GrokProvider(secure),ElevenLabsProvider(secure),EdgeProvider(this),SherpaProvider(this,models),
-            AzureProvider(secure),QwenProvider(secure),OpenAiProvider(secure),DeepgramProvider(secure),CartesiaProvider(secure),
+            GrokProvider(secure),ElevenLabsProvider(secure),EdgeProvider(this),SherpaProvider(this,models),MossProvider(models),
+            AzureProvider(secure),OpenAiProvider(secure),DeepgramProvider(secure),CartesiaProvider(secure),
             PlayHtProvider(this,secure),ResembleProvider(this,secure),
-            ProxyPcmProvider(ProviderIds.GOOGLE,"Google Cloud TTS",secure,"google",listOf("en-US-Chirp3-HD-Charon" to "en-US","fr-FR-Chirp3-HD-Aoede" to "fr-FR"),"OAuth/ADC credentials remain in the optional proxy."),
-            ProxyPcmProvider(ProviderIds.AWS,"Amazon Polly",secure,"aws",listOf("Joanna" to "en-US","Amy" to "en-GB","Lea" to "fr-FR"),"Use a proxy or temporary AWS credentials rather than a permanent secret on the phone."),
+            GoogleCloudProvider(this,secure),AwsPollyProvider(secure),
             CustomPcmProvider(secure),
         )
         router=VoiceRouter(settings,providers)

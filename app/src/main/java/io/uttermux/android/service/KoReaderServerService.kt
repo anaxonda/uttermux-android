@@ -9,6 +9,7 @@ import io.uttermux.android.UtterMuxApp
 import io.uttermux.android.audio.Playback
 import io.uttermux.android.config.AudioData
 import io.uttermux.android.audio.PcmTransform
+import io.uttermux.android.audio.PcmChunkQueue
 import io.uttermux.android.diagnostics.Diagnostics
 import org.json.JSONObject
 import java.io.*
@@ -26,11 +27,12 @@ class KoReaderServerService : Service() {
         }
     }
     data class StreamClip(
-        val queue:BlockingQueue<ByteArray> = LinkedBlockingQueue(64),
+        val queue:PcmChunkQueue = PcmChunkQueue(24_000),
         val cancelled:AtomicBoolean = AtomicBoolean(),
         @Volatile var generatedFrames:Long=0,@Volatile var playedFrames:Long=0,
         @Volatile var startedAt:Long=0,@Volatile var generationDone:Boolean=false,
         @Volatile var playbackDone:Boolean=false,@Volatile var error:String="",
+        @Volatile var routeKey:String="default",
     ) {
         val queuedSeconds get()=(generatedFrames-playedFrames).coerceAtLeast(0)/24_000.0
     }
@@ -73,9 +75,10 @@ class KoReaderServerService : Service() {
                     val clip = synchronized(cache) { cache[json.getString("handle")] } ?: error("Unknown handle")
                     clip.startedAt=0;clip.playbackDone=false
                     pool.execute {
-                        try { Playback.playStream(24_000,UtterMuxApp.instance.settings.let{io.uttermux.android.audio.AdaptiveBufferController(it).startupMillis()},clip.cancelled,
-                            {timeout->clip.queue.poll(timeout,TimeUnit.MILLISECONDS)},{clip.generationDone},
-                            {clip.startedAt=System.nanoTime()},{frames->clip.playedFrames+=frames}) }
+                        val controller=UtterMuxApp.instance.adaptiveBuffers.controller(clip.routeKey)
+                        try { Playback.playStream(24_000,controller.startupMillis(),clip.cancelled,
+                            {timeout->clip.queue.poll(timeout)},{clip.generationDone},
+                            {clip.startedAt=System.nanoTime()},{frames->clip.playedFrames+=frames},{controller.recordUnderrun()}) }
                         finally { clip.playbackDone=true }
                     }
                     respond(output, 200, "")
@@ -97,14 +100,17 @@ class KoReaderServerService : Service() {
             val diagnostic=Diagnostics.request("koreader $key chars=${text.length}")
             try {
                 val route=UtterMuxApp.instance.router.prepare("uttermux:auto",text,language)
+                clip.routeKey=route.primary.voice.id
+                val controller=UtterMuxApp.instance.adaptiveBuffers.controller(clip.routeKey)
                 UtterMuxApp.instance.router.stream(route,text,speed,1f,clip.cancelled){chunk->
                     val pcm=PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000)
+                    controller.record(chunk.generatedNanos,pcm.size/2.0/24_000.0)
                     clip.generatedFrames+=pcm.size/2
-                    while(!clip.cancelled.get())if(clip.queue.offer(pcm,100,TimeUnit.MILLISECONDS))return@stream true
+                    while(!clip.cancelled.get())if(clip.queue.offer(pcm,100,clip.cancelled))return@stream true
                     false
                 }
             } catch(error:Throwable){clip.error=error.message.orEmpty();Diagnostics.record(diagnostic,"error",clip.error)}
-            finally {clip.generationDone=true;clip.queue.offer(ByteArray(0));Diagnostics.record(diagnostic,"generated","frames=${clip.generatedFrames}")}
+            finally {clip.generationDone=true;clip.queue.offer(ByteArray(0),100);Diagnostics.record(diagnostic,"generated","frames=${clip.generatedFrames}")}
         }
     }
     private fun voices(): String {

@@ -5,7 +5,7 @@ import android.content.Context
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var defaultVoice: String
-        get() = prefs.getString("default_voice", "grok/eve@en-US")!!
+        get() = prefs.getString("default_voice", "uttermux:auto@en")!!
         set(value) { prefs.edit().putString("default_voice", value).apply() }
     var koReaderEnabled: Boolean
         get() = prefs.getBoolean("koreader_enabled", false)

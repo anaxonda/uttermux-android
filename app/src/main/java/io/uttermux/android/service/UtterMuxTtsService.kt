@@ -67,25 +67,30 @@ class UtterMuxTtsService : TextToSpeechService() {
     override fun onStop() { cancelled.set(true) }
     override fun onSynthesizeText(request: SynthesisRequest, callback: SynthesisCallback) {
         val signal = AtomicBoolean(); cancelled = signal
+        val terminal=AtomicBoolean()
+        fun doneOnce(){if(terminal.compareAndSet(false,true))callback.done()}
+        fun errorOnce(code:Int){if(terminal.compareAndSet(false,true))callback.error(code)}
         val locale = Languages.fromAndroid(request.language,request.country)
         val text=request.charSequenceText?.toString().orEmpty()
         val diagnostic=Diagnostics.request("${request.voiceName} $locale chars=${text.length}")
         val began=System.nanoTime();var emittedFrames=0;var firstAudio=true
         try {
-            if(text.isBlank()){callback.done();return}
+            if(text.isBlank()){doneOnce();return}
             val pitch=(request.pitch/100f).coerceIn(.5f,2f)
             // Resampling changes pitch and speed together; compensate provider
             // speed first so the final duration still follows speechRate.
             val providerSpeed=(request.speechRate/100f/pitch).coerceIn(.5f,2f)
             val route=router.prepare(request.voiceName,text,locale)
+            val controller=UtterMuxApp.instance.adaptiveBuffers.controller(route.primary.voice.id)
             Diagnostics.record(diagnostic,"routed","${route.primary.voice.id} ${route.primary.strategy}")
-            if(callback.start(24_000,AudioFormat.ENCODING_PCM_16BIT,1)!=TextToSpeech.SUCCESS){signal.set(true);return}
+            if(callback.start(24_000,AudioFormat.ENCODING_PCM_16BIT,1)!=TextToSpeech.SUCCESS){signal.set(true);errorOnce(TextToSpeech.ERROR_OUTPUT);return}
             Diagnostics.record(diagnostic,"callback-start","${(System.nanoTime()-began)/1_000_000}ms")
             router.stream(route,text,providerSpeed,pitch,signal){chunk->
                 if(signal.get())return@stream false
                 if(chunk.pcm16.isEmpty()||chunk.pcm16.size%2!=0)throw IllegalArgumentException("Provider returned invalid PCM16 audio")
                 val pitched=PcmTransform.pitchPcm16(chunk.pcm16,pitch)
                 val pcm=PcmTransform.resamplePcm16(pitched,chunk.sampleRate,24_000)
+                controller.record(chunk.generatedNanos,pcm.size/2.0/24_000.0)
                 if(firstAudio){firstAudio=false;Diagnostics.record(diagnostic,"first-audio","${(System.nanoTime()-began)/1_000_000}ms")}
                 callback.rangeStart(emittedFrames,chunk.range.start.coerceIn(0,text.length),chunk.range.endExclusive.coerceIn(0,text.length))
                 var offset=0;val maximum=callback.maxBufferSize.coerceAtLeast(2)
@@ -101,10 +106,10 @@ class UtterMuxTtsService : TextToSpeechService() {
         catch(error:Throwable){
             Log.e("UtterMuxTTS","Synthesis failed for $locale/${request.voiceName}: ${error.message}",error)
             Diagnostics.record(diagnostic,"error",error.message.orEmpty())
-            if(!signal.get())callback.error(errorCode(error))
+            if(!signal.get())errorOnce(errorCode(error))
         } finally {
             Diagnostics.record(diagnostic,"complete","${(System.nanoTime()-began)/1_000_000}ms frames=$emittedFrames cancelled=${signal.get()}")
-            if(!callback.hasFinished())callback.done()
+            doneOnce()
         }
     }
     private fun errorCode(error:Throwable):Int {

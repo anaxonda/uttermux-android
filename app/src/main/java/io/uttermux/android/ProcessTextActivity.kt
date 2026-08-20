@@ -5,11 +5,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import io.uttermux.android.audio.Playback
-import io.uttermux.android.audio.AdaptiveBufferController
 import io.uttermux.android.audio.PcmTransform
+import io.uttermux.android.audio.PcmChunkQueue
 import kotlinx.coroutines.*
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ProcessTextActivity : Activity() {
@@ -25,15 +23,17 @@ class ProcessTextActivity : Activity() {
         if (text.isBlank()) { finish(); return }
         scope.launch {
             runCatching { withContext(Dispatchers.IO) {
-                val app=UtterMuxApp.instance;val queue=LinkedBlockingQueue<ByteArray>(64);val done=AtomicBoolean()
+                val app=UtterMuxApp.instance;val queue=PcmChunkQueue(24_000);val done=AtomicBoolean()
+                val route=app.router.prepare("uttermux:auto",text,"auto");val controller=app.adaptiveBuffers.controller(route.primary.voice.id)
                 val producer=async{
-                    try{val route=app.router.prepare("uttermux:auto",text,"auto");app.router.stream(route,text,1f,1f,cancelled){chunk->
+                    try{app.router.stream(route,text,1f,1f,cancelled){chunk->
                         val pcm=PcmTransform.resamplePcm16(chunk.pcm16,chunk.sampleRate,24_000)
-                        while(!cancelled.get())if(queue.offer(pcm,100,TimeUnit.MILLISECONDS))return@stream true
+                        controller.record(chunk.generatedNanos,pcm.size/2.0/24_000.0)
+                        while(!cancelled.get())if(queue.offer(pcm,100,cancelled))return@stream true
                         false
-                    }}finally{done.set(true);queue.offer(ByteArray(0))}
+                    }}finally{done.set(true);queue.offer(ByteArray(0),100)}
                 }
-                Playback.playStream(24_000,AdaptiveBufferController(app.settings).startupMillis(),cancelled,{timeout->queue.poll(timeout,TimeUnit.MILLISECONDS)},{done.get()})
+                Playback.playStream(24_000,controller.startupMillis(),cancelled,{timeout->queue.poll(timeout)},{done.get()},onUnderrun={controller.recordUnderrun()})
                 producer.await()
             } }
                 .onSuccess { }

@@ -29,7 +29,7 @@ class TtsDataActivity : Activity() {
         }.distinct().toCollection(ArrayList())
         val result=Intent().putStringArrayListExtra(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES,voices)
             .putStringArrayListExtra(TextToSpeech.Engine.EXTRA_UNAVAILABLE_VOICES,arrayListOf())
-        setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_PASS,result);finish()
+        setResult(if(voices.isEmpty())TextToSpeech.Engine.CHECK_VOICE_DATA_FAIL else TextToSpeech.Engine.CHECK_VOICE_DATA_PASS,result);finish()
     }
     private fun sampleText() {
         val language=Languages.fromAndroid(intent.getStringExtra("language"),intent.getStringExtra("country")).substringBefore('-')

@@ -2,6 +2,9 @@ package io.uttermux.android.audio
 
 /** Small, allocation-bounded PCM transforms used by the Android TTS bridge. */
 object PcmTransform {
+    fun floatToPcm16(input:FloatArray):ByteArray {
+        val output=ByteArray(input.size*2);input.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767f).toInt();output[i*2]=sample.toByte();output[i*2+1]=(sample shr 8).toByte()};return output
+    }
     fun resamplePcm16(input:ByteArray,fromRate:Int,toRate:Int):ByteArray {
         if(fromRate==toRate||input.size<4)return input
         require(fromRate>0&&toRate>0)

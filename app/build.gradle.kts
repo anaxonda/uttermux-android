@@ -7,12 +7,13 @@ android {
         applicationId = "io.uttermux.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true; buildConfig = true }
-    packaging { jniLibs.useLegacyPackaging = true }
+    packaging { jniLibs.useLegacyPackaging = true; jniLibs.pickFirsts += "**/libonnxruntime.so" }
 }
 
 dependencies {
@@ -29,6 +30,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
     implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("androidx.work:work-runtime:2.11.2")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

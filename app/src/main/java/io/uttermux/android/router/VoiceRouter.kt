@@ -11,6 +11,7 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
     val providerDescriptors get()=providers.values.map(TtsProvider::descriptor).sortedBy{it.name}
     val voices get() = providers.values.flatMap { it.voices }
     val availableVoices get() = providers.values.flatMap(TtsProvider::availableVoices)
+    fun isAvailable(voice:VoiceRecord)=providers[voice.provider]?.isAvailable(voice)==true
     fun voice(id: String): VoiceRecord? = voices.firstOrNull { it.id == id || it.id.substringBefore('@') == id.substringBefore('@') }
     fun candidates(requestedVoice: String?, language: String): List<VoiceRecord> {
         val result = mutableListOf<VoiceRecord>()

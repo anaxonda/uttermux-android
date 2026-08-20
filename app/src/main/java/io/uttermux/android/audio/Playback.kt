@@ -37,7 +37,7 @@ object Playback {
         }
     }
     fun playStream(sampleRate:Int,startupMs:Int,cancelled:AtomicBoolean,next:(Long)->ByteArray?,generationDone:()->Boolean,
-                   onStarted:()->Unit={},onFrames:(Int)->Unit={}) {
+                   onStarted:()->Unit={},onFrames:(Int)->Unit={},onUnderrun:()->Unit={}) {
         stop();val pending=mutableListOf<ByteArray>();var buffered=0
         val target=sampleRate*2*startupMs/1000
         while(buffered<target&&!cancelled.get()) {
@@ -65,7 +65,7 @@ object Playback {
             for(chunk in pending)if(!write(chunk))return
             while(!cancelled.get()) {
                 val chunk=next(100)
-                if(chunk==null){if(generationDone())break else continue}
+                if(chunk==null){if(generationDone())break else {onUnderrun();continue}}
                 if(chunk.isEmpty()||!write(chunk))break
             }
         } finally {

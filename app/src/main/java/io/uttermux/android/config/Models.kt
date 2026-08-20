@@ -9,7 +9,10 @@ object ProviderIds {
     const val RESEMBLE="resemble";const val CUSTOM="custom"
 }
 
-data class CredentialField(val key:String,val label:String,val secret:Boolean=true,val placeholder:String="")
+data class CredentialField(
+    val key:String,val label:String,val secret:Boolean=true,val placeholder:String="",
+    val choices:List<String> = emptyList(),
+)
 data class ProviderDescriptor(
     val id:String,val name:String,val network:Boolean=true,val experimental:Boolean=false,
     val credentialFields:List<CredentialField> = emptyList(),val note:String="",
@@ -19,6 +22,39 @@ data class ModelCatalogEntry(
     val id:String,val family:String,val title:String,val languages:Set<String>,val status:String,
     val approxSizeMb:Int=0,val license:String="",val description:String="",val sourceUrl:String="",
 )
+
+/** Provider-independent catalog records. VoiceRecord remains the flattened,
+ * Android-facing projection used by the existing provider API. */
+data class VoiceDefinition(
+    val providerId:String,
+    val speakerId:String,
+    val displayName:String,
+    val languages:Set<String>,
+    val accent:String="",
+    val gender:String="",
+    val license:String="",
+    val attribution:String="",
+)
+
+data class ModelVariant(
+    val id:String,
+    val family:String,
+    val displayName:String,
+    val networkRequired:Boolean,
+    val quantization:String="",
+    val downloadSizeMb:Int=0,
+    val estimatedRamMb:Int=0,
+    val performanceClass:String="unknown",
+    val capabilities:Set<String> = emptySet(),
+)
+
+data class VoiceChoice(
+    val definition:VoiceDefinition,
+    val variant:ModelVariant,
+    val locale:String,
+) {
+    val stableId="${definition.providerId}/${variant.id}/${definition.speakerId}@${Languages.normalized(locale)}"
+}
 
 data class VoiceRecord(
     val id: String,
@@ -37,6 +73,12 @@ data class VoiceRecord(
     val approxSizeMb:Int = 0,
     val license:String = "",
     val capabilities:Set<String> = emptySet(),
+    val accent:String = "",
+    val gender:String = "",
+    val quantization:String = "",
+    val estimatedRamMb:Int = 0,
+    val performanceClass:String = "unknown",
+    val attribution:String = "",
 )
 
 data class AudioData(val sampleRate: Int, val pcm16: ByteArray)
@@ -51,8 +93,12 @@ object Languages {
         val a = normalized(capability); val b = normalized(requested)
         return a == b || a.substringBefore('-') == b.substringBefore('-')
     }
-    private val iso3Languages by lazy { Locale.getISOLanguages().associateBy { runCatching { Locale(it).isO3Language.lowercase() }.getOrDefault(it) } }
-    private val iso3Countries by lazy { Locale.getISOCountries().associateBy { runCatching { Locale("",it).isO3Country.uppercase() }.getOrDefault(it) } }
+    fun searchableName(value:String):String {
+        val tag=normalized(value);val locale=Locale.forLanguageTag(tag)
+        return listOf(tag,locale.getDisplayLanguage(Locale.ENGLISH),locale.getDisplayLanguage(),locale.getDisplayCountry(Locale.ENGLISH),locale.getDisplayCountry()).filter(String::isNotBlank).distinct().joinToString(" ")
+    }
+    private val iso3Languages by lazy { Locale.getISOLanguages().associateBy { runCatching { Locale.Builder().setLanguage(it).build().isO3Language.lowercase() }.getOrDefault(it) } }
+    private val iso3Countries by lazy { Locale.getISOCountries().associateBy { runCatching { Locale.Builder().setRegion(it).build().isO3Country.uppercase() }.getOrDefault(it) } }
     fun fromAndroid(language:String?,country:String?):String {
         val rawLanguage=language.orEmpty().lowercase().ifBlank{"en"}
         val lang=if(rawLanguage.length==3) iso3Languages[rawLanguage]?:rawLanguage else rawLanguage
