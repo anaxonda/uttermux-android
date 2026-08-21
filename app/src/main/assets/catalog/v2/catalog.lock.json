@@ -1,15 +1,15 @@
 {
-  "commit": "cc9e5ef96fdd2338d40b0eba2dcf433669f0780e",
+  "commit": "8910943f91f40423d5e8302978bbea38dc1df01f",
   "path": "catalog/v2/catalog.json",
   "provenance": {
-    "curatedSha256": "7397d6122be7982455877117d28dde4bb1a243ece1961d76de9955a5565db923",
+    "curatedSha256": "f93975a6b411d645aa0a3d0ef28b9d4061be12f6b3a3600d203f8d69c57c3c1e",
     "curatedSource": "catalog.toml",
     "piperSha256": "636e877eacf3c2904aa6aa8088c867bd3cd9df7f39d2023b73d0660a59249c19",
     "piperSource": "piper.json",
-    "platformSha256": "72f8e9ad3d39a0f92c69180761916cd30b0ca5c709971039573ca4a83013578c",
+    "platformSha256": "88ed2a1ebb485a789864ad14a530a285bbeae6947e629df84379ed4365a24dbd",
     "platformSource": "platform-variants.toml"
   },
   "repository": "anaxonda/uttermux-linux",
   "schemaVersion": 1,
-  "sha256": "fbba9f1cef3ee4da315fe83165d3f906bec31800b43abd0d7cd1068706498173"
+  "sha256": "ff600d9f0f81f4e24ebcad4af9a0e6c7949decf59b0eccf0354ccb5b57e1ec51"
 }

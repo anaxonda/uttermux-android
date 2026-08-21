@@ -5,8 +5,9 @@
 [![Android CI](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml/badge.svg)](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml)
 
 UtterMux is an Android system text-to-speech engine and voice manager. It gives
-Android readers one interface for local ONNX models and online providers, and
-also implements the loopback protocol used by KOReader's `TTS.koplugin`.
+applications one standard `TextToSpeechService` interface for local models and
+online providers. An optional localhost PCM adapter supports clients that do
+not use Android's system TTS API.
 
 The companion [Linux broker and Speech Dispatcher backend](https://github.com/anaxonda/uttermux-linux)
 uses the same catalog contract and routing concepts.
@@ -20,8 +21,8 @@ uses the same catalog contract and routing concepts.
 
 ## What works
 
-- Android `TextToSpeechService` integration for Feeder, Librera, KOReader, and
-  other clients using the standard system API.
+- Android `TextToSpeechService` integration for applications using the standard
+  system API.
 - Early `onStart`, adaptively reserved incremental PCM delivery, exact text
   ranges, cancellation, engine warming, segmented Piper synthesis, and bounded
   silence trimming.
@@ -94,7 +95,7 @@ means a reference recording must be configured before a system voice exists.
 | Pocket | Yes; presets and profiles | Yes; presets and profiles | Reference-conditioned cloning |
 | Kokoro | v1.0 and v1.1 FP32 | v1.0 FP32 | INT8 and FP8 are not included |
 | ZipVoice Distill | No | Profile; INT8 | Linux requires reference audio and transcript |
-| MOSS-TTS-Nano | FP32; explicit heavy/experimental download | Companion adapter; FP32 | Runnable on Android; not suitable for the 2019 reference phone |
+| MOSS-TTS-Nano | FP32; explicit heavy/experimental download | Companion adapter; FP32 | Runnable; benchmark before sustained reading |
 | Qwen3-TTS 0.6B | Base Q4_K_M device preview; profiles | Companion adapter; CustomVoice | Separate runtimes sharing catalog metadata |
 
 | Concrete artifact | Languages / voices | Clone | Download | Precision | Est. RAM | 2019 SM-G970F result | Upstream |
@@ -107,10 +108,10 @@ means a reference recording must be configured before a system voice exists.
 | `matcha-icefall-en_US-ljspeech` | English; 1 | No | 77 MiB | FP32 | 260 MiB | Runnable; sustained reader test pending | [Matcha-TTS](https://github.com/shivammehta25/Matcha-TTS) |
 | `sherpa-onnx-supertonic-3-tts-int8-2026-05-11` | 31 languages; 10 styles | No | 129 MiB | INT8 | 350 MiB | Runnable; sustained reader test pending | [Supertonic](https://github.com/supertone-inc/supertonic) |
 | `sherpa-onnx-pocket-tts-int8-2026-01-26` | English; 10 references + profiles | Yes | 176 MiB | INT8 | 420 MiB | Two-step sustained warm RTF ~0.47–0.48; client boundaries may remain audible | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
-| `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | Same heavy family as measured v1.1; not accepted for continuous reading on the reference phone | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
+| `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | Same heavy family as measured v1.1; benchmark required for continuous reading | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
 | `kokoro-multi-lang-v1_1` | English/Chinese; 103 speakers | No | 348 MiB | FP32 | 700 MiB | Runnable; same heavy tier, not separately timed | [Kokoro v1.1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html) |
 | `moss-tts-nano-100m-onnx` | 20 languages; 18 presets | No | 728 MiB | FP32 | ~1.4 GiB | Runnable but RTF ~1.41–1.47; exposed only for substantially faster devices | [MOSS-TTS-Nano](https://github.com/OpenMOSS/MOSS-TTS-Nano) |
-| `qwen3-tts-0.6b-base-q4km` | 10 languages; user profiles | Yes | 843 MiB | Q4_K_M GGUF | ~1.54 GiB measured PSS | Device preview only: a bounded 128-token clone run produced no first audio after 4 min 19 s on the reference phone | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) / [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) |
+| `qwen3-tts-0.6b-base-q4km` | 10 languages; user profiles | Yes | 843 MiB | Q4_K_M GGUF | ~1.54 GiB measured PSS | Device preview; the Galaxy S10 benchmark produced no first audio within 4 min 19 s | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) / [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) |
 
 Kokoro v1.1 INT8 exists upstream but is not included because the tested
 Android/ARM path produced intermittent rail-pinned audio and regressions.
@@ -205,7 +206,7 @@ UtterMux prepares a route before starting, tells Android the fixed output format
 (24 kHz, mono, signed PCM16) immediately, and emits audio as soon as its provider
 can produce it. Local VITS/Piper text is split on semantic boundaries and the
 engine is retained in a small LRU cache. Generation, decoding, and playback are
-independent. Direct playback, including KOReader, uses a PCM-duration-bounded
+independent. Playback owned by the optional localhost adapter uses a PCM-duration-bounded
 producer/consumer queue whose startup reserve adapts to measured real-time
 factor and underruns, including changes caused by thermal throttling.
 
@@ -214,9 +215,11 @@ voices in the middle of an utterance. Language routes use exact BCP-47 matches,
 then base-language matches, then the global default and local-only safe
 fallbacks.
 
-## KOReader
+## Legacy localhost compatibility adapter
 
-Enable the compatibility server in UtterMux and install `TTS.koplugin` under
+Android applications normally use UtterMux through `TextToSpeechService` and do
+not need this adapter. For clients that require the older localhost protocol,
+enable the compatibility server in UtterMux and install `TTS.koplugin` under
 `/sdcard/koreader/plugins/`. The server binds only IPv4 loopback at
 `127.0.0.1:5000` and implements `/voices`, `/`, `/play`, `/stop`, `/remaining`,
 `/pause`, `/resume`, and `/health`. Synthesis and playback are concurrent, so
@@ -239,8 +242,9 @@ Local model downloads require an explicit install action.
 Pocket reuses one runtime/model with cached reference WAV files. Its one-to-five-step
 quality selector trades generation latency for refinement. Automatic thread selection
 uses at most two threads for Pocket and four for other local engines, bounded by the
-device's available cores. Two Pocket steps are the fresh quality default; the benchmark
-figures below describe the reference phone rather than a universal optimum. Kokoro uses the supported FP32 graph: the available
+device's available cores. Two Pocket steps are the fresh quality default; the
+figures below are measurements from the named Galaxy S10 benchmark, not a
+universal optimum. Kokoro uses the supported FP32 graph: the available
 INT8 export is intentionally hidden because current ARM reports include rail-pinned
 audio, tones, and performance regressions. The official MOSS FP32 graph remains
 available as an explicit heavy/experimental download for faster hardware; it is
@@ -254,7 +258,7 @@ but it is excluded from automatic fallback until sustained-reader benchmarks
 establish suitable hardware. Audio8, Chatterbox, NeuTTS, LEMAS, X-Voice, and
 OmniVoice remain documentation-only candidates.
 
-On the Galaxy S10 reference device, model download and verification took 67.9
+In the documented Galaxy S10 run, model download and verification took 67.9
 seconds. The process reached approximately 1.5 GiB PSS. A clone synthesis capped
 at 128 audio tokens (at most about 10.7 seconds of output at 12 Hz) was terminated
 after 4 minutes 19 seconds without producing its first streaming callback, with
@@ -263,8 +267,10 @@ successfully extracted and loaded before generation; profiles now store it as
 JSON because the pinned upstream binary loader can misclassify arbitrary float
 bytes containing `[` as JSON.
 This gives a lower-bound RTF well above 17 and also means callback-only
-cancellation cannot interrupt the expensive first generation window. Qwen is
-therefore unsuitable for system reading on this device.
+cancellation cannot interrupt the expensive first generation window. That
+artifact/runtime/hardware combination does not meet UtterMux's continuous
+reading target; the result is not a general classification of Qwen or newer
+Android hardware.
 
 ## Cloud credentials and proxy contract
 
@@ -334,7 +340,7 @@ models nor depends on provider availability.
 
 ### Galaxy S10 development benchmark
 
-The reference phone is a 2019 Samsung Galaxy S10 SM-G970F (Exynos 9820,
+The benchmark device is a 2019 Samsung Galaxy S10 SM-G970F (Exynos 9820,
 Android 12, about 5.5 GiB usable RAM). It is a low-spec acceptance target by
 2026 standards, not a representative current flagship. RTF is generation time
 divided by generated audio duration; below 1.0 is faster than realtime. These
@@ -359,7 +365,7 @@ exercise repeated provider requests. Because readers
 such as Librera submit the next section only after the previous Android TTS
 request completes, that per-request generation time still becomes an audible
 section gap; UtterMux cannot pre-generate text the client has not supplied.
-A KOReader regression test now plays the same Pocket section twice
+A localhost-adapter regression test now plays the same Pocket section twice
 and waits for AudioTrack's actual playback head, covering stale-stream reuse and
 clipped section tails. These tests are excluded from the ordinary suite because
 they consume substantial bandwidth, storage, and time.
@@ -382,8 +388,8 @@ control thermal state, CPU governor, charging state, or background load.
 
 ### Newer-phone model scope
 
-Kokoro FP32 is already functionally compatible with the reference phone; its
-measured RTF is the blocker. A recent high-performance ARM phone may make it a
+Kokoro FP32 is functionally compatible with the benchmark Galaxy S10; its
+measured RTF misses the sustained-reading target. A recent high-performance ARM phone may make it a
 continuous-reading choice, but UtterMux does not infer that from RAM or core
 count alone. Qwen3-TTS 0.6B, Audio8 0.6B INT4, ZipVoice, and other heavyweight
 families require a maintained arm64 runtime plus measured cold/warm latency,
@@ -409,10 +415,17 @@ packaging those checked-in binaries.
   producer/consumer PCM pipeline and underrun handling.
 - [Read Aloud](https://github.com/ken107/read-aloud) informed cloud-provider
   discovery, authentication, and proxy tradeoffs.
-- [KOReader](https://github.com/koreader/koreader) is supported both through
-  Android system TTS and the loopback compatibility protocol.
 - [qwen3-tts-android](https://github.com/Danmoreng/qwen3-tts-android) is a
   reference for local quantized Qwen deployment; UtterMux does not embed it.
+- [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) supplies the
+  GGML/GGUF runtime and JNI API used by UtterMux's gated Qwen experiment.
+- [qwen3-tts-apple-silicon](https://github.com/kapi2800/qwen3-tts-apple-silicon),
+  [qwen3-tts](https://github.com/gabriele-mastrapasqua/qwen3-tts), and
+  [swift-qwen3-tts](https://github.com/AtomGradient/swift-qwen3-tts) document
+  independent MLX/Metal deployment paths on M-series Macs.
+- [PocketTTS.cpp](https://github.com/VolgaGerm/PocketTTS.cpp) and
+  [speech-android](https://github.com/soniqo/speech-android) are reference
+  implementations for pipelined Pocket inference and bounded Kokoro turns.
 
 The project is GPL-3.0-or-later. The pinned sherpa-onnx JNI wrapper and native
 libraries are Apache-2.0 components from k2-fsa; individual voice/model licenses
