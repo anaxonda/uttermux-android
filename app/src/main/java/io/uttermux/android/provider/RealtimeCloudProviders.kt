@@ -26,7 +26,7 @@ private fun awaitSocket(cancelled:AtomicBoolean,done:CountDownLatch,socket:WebSo
 
 class QwenProvider(private val secure:SecureStore):TtsProvider {
     override val id=ProviderIds.QWEN
-    override val descriptor=ProviderDescriptor(id,"Qwen / DashScope",credentialFields=listOf(CredentialField("qwen","API key"),CredentialField("qwen_region","Region",false,"singapore"),CredentialField("qwen_workspace","Workspace ID",false)))
+    override val descriptor=ProviderDescriptor(id,"Qwen / DashScope",credentialFields=listOf(CredentialField("qwen","API key"),CredentialField("qwen_region","Region",false,"singapore"),CredentialField("qwen_workspace","Workspace ID",false)),note="Qwen3-TTS realtime accepts an explicit language but does not support speech-rate control; rate remains 1.0 for this provider.")
     private val names=listOf("Cherry","Serena","Ethan","Chelsie")
     override val voices=names.map{VoiceRecord("qwen/$it@zh-CN","$it · Qwen",Locale.CHINA,id,"qwen3-tts-flash-realtime",setOf("zh","en","fr","de","es","it","pt","ja","ko","ru"),true,capabilities=setOf("streaming","multilingual"))}
     override fun isAvailable(voice:VoiceRecord)=secure.get("qwen").isNotBlank()
@@ -39,14 +39,14 @@ class QwenProvider(private val secure:SecureStore):TtsProvider {
         lateinit var socket:WebSocket
         socket=HttpAudio.client.newWebSocket(request,object:WebSocketListener(){
             override fun onOpen(webSocket:WebSocket,response:Response){
-                webSocket.send(JSONObject().put("type","session.update").put("session",JSONObject().put("mode","commit").put("voice",session.voice.id.substringAfter('/').substringBefore('@')).put("response_format","pcm").put("sample_rate",24000).put("speed",speed)).toString())
-                webSocket.send(JSONObject().put("type","input_text_buffer.append").put("text",text).toString())
-                webSocket.send(JSONObject().put("type","input_text_buffer.commit").toString())
+                webSocket.send(JSONObject().put("event_id",UUID.randomUUID().toString()).put("type","session.update").put("session",JSONObject().put("mode","commit").put("voice",session.voice.id.substringAfter('/').substringBefore('@')).put("language_type",CloudContracts.qwenLanguage(session.language)).put("response_format","pcm").put("sample_rate",24000)).toString())
+                webSocket.send(JSONObject().put("event_id",UUID.randomUUID().toString()).put("type","input_text_buffer.append").put("text",text).toString())
+                webSocket.send(JSONObject().put("event_id",UUID.randomUUID().toString()).put("type","input_text_buffer.commit").toString())
             }
             override fun onMessage(webSocket:WebSocket,textMessage:String){
                 val event=JSONObject(textMessage);when(event.optString("type")){
                     "response.audio.delta"->{val pcm=Base64.decode(event.getString("delta"),Base64.DEFAULT);if(!emit(AudioChunk(pcm,24000,range,sequence++))){cancelled.set(true);webSocket.cancel()}}
-                    "response.audio.done"->webSocket.send(JSONObject().put("type","session.finish").toString())
+                    "response.audio.done"->webSocket.send(JSONObject().put("event_id",UUID.randomUUID().toString()).put("type","session.finish").toString())
                     "session.finished"->{done.countDown();webSocket.close(1000,null)}
                     "error"->{failure.set(IllegalStateException(event.toString()));done.countDown()}
                 }
@@ -66,7 +66,7 @@ class DeepgramProvider(private val secure:SecureStore):TtsProvider {
     override fun isAvailable(voice:VoiceRecord)=secure.get("deepgram").isNotBlank()
     override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean){
         val key=secure.get("deepgram");require(key.isNotBlank()){ "Deepgram key is not configured" };val model=session.voice.id.substringAfter('/').substringBefore('@')
-        val request=Request.Builder().url("wss://api.deepgram.com/v1/speak?model=$model&encoding=linear16&sample_rate=24000").header("Authorization","Token $key").build()
+        val request=Request.Builder().url("wss://api.deepgram.com/v1/speak?model=$model&encoding=linear16&sample_rate=24000&speed=${speed.coerceIn(.7f,1.5f)}").header("Authorization","Token $key").build()
         val done=CountDownLatch(1);val failure=AtomicReference<Throwable?>();var sequence=0;val range=TextRange(0,text.length)
         lateinit var socket:WebSocket
         socket=HttpAudio.client.newWebSocket(request,object:WebSocketListener(){
@@ -87,11 +87,18 @@ class CartesiaProvider(private val secure:SecureStore):TtsProvider {
     override fun isAvailable(voice:VoiceRecord)=secure.get("cartesia").isNotBlank()
     override fun refresh(){
         val key=secure.get("cartesia");if(key.isBlank())return
-        val json=JSONObject(String(HttpAudio.get("https://api.cartesia.ai/voices?limit=100&expand%5B%5D=preview_file_url",mapOf("Authorization" to "Bearer $key","Cartesia-Version" to "2026-03-01"))))
-        val array=json.getJSONArray("data");val found=(0 until array.length()).map{array.getJSONObject(it)}.filter{it.optBoolean("is_public")||it.optBoolean("is_owner")}.map{
-            val locale=listOf(it.optString("language","en"),it.optString("country").takeIf(String::isNotBlank)).filterNotNull().joinToString("-")
-            VoiceRecord("cartesia/${it.getString("id")}@$locale","${it.optString("name","Voice")} · Cartesia",Locale.forLanguageTag(locale),id,"Sonic 3",setOf(locale),true,it.optString("description"),it.optString("preview_file_url"),capabilities=setOf("streaming","timestamps"))
-        };if(found.isNotEmpty())catalog=found
+        val headers=mapOf("X-API-Key" to key,"Cartesia-Version" to "2026-03-01");val found=mutableListOf<VoiceRecord>();var cursor=""
+        do{
+            val url="https://api.cartesia.ai/voices?limit=100&expand%5B%5D=preview_file_url"+(if(cursor.isBlank())"" else "&starting_after="+java.net.URLEncoder.encode(cursor,"UTF-8"))
+            val json=JSONObject(String(HttpAudio.get(url,headers)));val array=json.getJSONArray("data")
+            val page=(0 until array.length()).map{array.getJSONObject(it)}
+            found+=page.filter{it.optBoolean("is_public",true)||it.optBoolean("is_owner")}.map{
+                val locale=listOf(it.optString("language","en"),it.optString("country").takeIf(String::isNotBlank)).filterNotNull().joinToString("-")
+                VoiceRecord("cartesia/${it.getString("id")}@$locale","${it.optString("name","Voice")} · Cartesia",Locale.forLanguageTag(locale),id,"Sonic 3",setOf(locale),true,it.optString("description"),it.optString("preview_file_url"),capabilities=setOf("streaming","timestamps"))
+            }
+            cursor=if(json.optBoolean("has_more")&&page.isNotEmpty())page.last().optString("id") else ""
+        }while(cursor.isNotBlank())
+        if(found.isNotEmpty())catalog=found.distinctBy{it.id}
     }
     override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean){
         val key=secure.get("cartesia");require(key.isNotBlank()){ "Cartesia key is not configured" }
@@ -99,7 +106,7 @@ class CartesiaProvider(private val secure:SecureStore):TtsProvider {
         val done=CountDownLatch(1);val failure=AtomicReference<Throwable?>();var sequence=0;val range=TextRange(0,text.length);lateinit var socket:WebSocket
         socket=HttpAudio.client.newWebSocket(request,object:WebSocketListener(){
             override fun onOpen(webSocket:WebSocket,response:Response){
-                val body=JSONObject().put("model_id","sonic-3").put("transcript",text).put("voice",JSONObject().put("mode","id").put("id",session.voice.id.substringAfter('/').substringBefore('@'))).put("language",session.language.substringBefore('-')).put("context_id",UUID.randomUUID().toString()).put("output_format",JSONObject().put("container","raw").put("encoding","pcm_s16le").put("sample_rate",24000)).put("continue",false)
+                val body=JSONObject().put("model_id","sonic-3").put("transcript",text).put("voice",JSONObject().put("mode","id").put("id",session.voice.id.substringAfter('/').substringBefore('@'))).put("language",session.language.substringBefore('-')).put("context_id",UUID.randomUUID().toString()).put("output_format",JSONObject().put("container","raw").put("encoding","pcm_s16le").put("sample_rate",24000)).put("generation_config",JSONObject().put("speed",speed.coerceIn(.6f,1.5f))).put("continue",false)
                 webSocket.send(body.toString())
             }
             override fun onMessage(webSocket:WebSocket,textMessage:String){val event=JSONObject(textMessage);when(event.optString("type")){"chunk"->{val pcm=Base64.decode(event.getString("data"),Base64.DEFAULT);if(!emit(AudioChunk(pcm,24000,range,sequence++))){cancelled.set(true);webSocket.cancel()}};"done"->{done.countDown();webSocket.close(1000,null)};"error"->{failure.set(IllegalStateException(event.toString()));done.countDown()}}}

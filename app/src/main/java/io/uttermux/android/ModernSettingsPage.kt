@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import io.uttermux.android.audio.PreviewController
 import io.uttermux.android.config.*
+import io.uttermux.android.provider.CloudContracts
 import io.uttermux.android.diagnostics.Diagnostics
 import io.uttermux.android.service.KoReaderServerService
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +48,7 @@ import kotlinx.coroutines.withContext
         if(providersOpen){
             item{Text("Credentials are encrypted with Android Keystore. Cloud synthesis and previews may use paid credits.",style=MaterialTheme.typography.bodySmall)}
             items(onlineProviders,key={"provider-${it.id}"}){provider->
-                val expanded=expandedProvider==provider.id;val configured=provider.credentialFields.isEmpty()||provider.credentialFields.any{values[it.key].orEmpty().isNotBlank()}
+                val expanded=expandedProvider==provider.id;val configured=CloudContracts.configured(provider.id){values[it].orEmpty()}
                 Card{Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){
                     Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(provider.name,style=MaterialTheme.typography.titleSmall);Text(if(provider.credentialFields.isEmpty())"No account setup required" else if(configured)"Configured · online${if(provider.experimental)" · experimental" else ""}" else "Not configured · online${if(provider.experimental)" · experimental" else ""}",style=MaterialTheme.typography.bodySmall)};TextButton(onClick={expandedProvider=if(expanded)"" else provider.id}){Text(if(expanded)"Close" else if(configured)"Edit" else "Set up")}}
                     if(provider.note.isNotBlank())Text(provider.note,style=MaterialTheme.typography.bodySmall)

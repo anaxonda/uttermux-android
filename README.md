@@ -41,6 +41,11 @@ uses the same catalog contract and routing concepts.
   custom PCM provider. Google accepts a restricted API key or proxy. AWS accepts
   direct SigV4 credentials, Cognito temporary credentials, or a proxy.
 
+The Linux documentation defines the shared, audited request contracts for
+[authentication, discovery, language, rate, audio, and proxy behavior](https://github.com/anaxonda/uttermux-linux/blob/main/docs/cloud-providers.md).
+Platform adapters follow those contracts; a control is explicitly reported as
+unsupported when the selected provider API does not offer it.
+
 Paid cloud providers are never inserted as implicit fallbacks. Add them to a
 language route explicitly. API keys are encrypted with Android Keystore and are
 excluded from backup and device transfer.

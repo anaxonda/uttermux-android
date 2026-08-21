@@ -27,7 +27,7 @@ class PlayHtProvider(private val context:Context,private val secure:SecureStore)
     override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean){
         val key=secure.get("playht");val user=secure.get("playht_user");require(key.isNotBlank()&&user.isNotBlank()){ "PlayHT credentials are not configured" }
         val voice=java.net.URLDecoder.decode(session.voice.id.substringAfter('/').substringBefore('@'),"UTF-8")
-        val body=JSONObject().put("text",text).put("voice",voice).put("voice_engine",session.voice.model).put("output_format","wav").put("sample_rate",24000).put("speed",speed)
+        val body=JSONObject().put("text",text).put("voice",voice).put("voice_engine",session.voice.model).put("output_format","wav").put("sample_rate",24000).put("speed",speed.coerceIn(.1f,5f)).put("language",CloudContracts.playHtLanguage(session.language))
         val bytes=HttpAudio.postRaw("https://api.play.ht/api/v2/tts/stream",body.toString().toByteArray(),"application/json",mapOf("AUTHORIZATION" to key,"X-USER-ID" to user,"Accept" to "audio/wav"),cancelled)
         val audio=CompressedAudioDecoder.decode(context,bytes,"wav");emit(AudioChunk(audio.pcm16,audio.sampleRate,TextRange(0,text.length),0))
     }
@@ -75,9 +75,9 @@ class CustomPcmProvider(private val secure:SecureStore):TtsProvider {
     override val id=ProviderIds.CUSTOM
     override val descriptor=ProviderDescriptor(id,"Custom streamed PCM",experimental=true,credentialFields=listOf(CredentialField("custom_endpoint","Synthesis endpoint",false),CredentialField("custom_token","Bearer token"),CredentialField("custom_voice","Voice ID",false)),note="POSTs a constrained JSON request and expects 24 kHz PCM16 mono.")
     override val voices get()=secure.get("custom_voice").ifBlank{"default"}.split(',','\n').map(String::trim).filter(String::isNotBlank).map{VoiceRecord("custom/$it@en-US","$it · Custom",Locale.US,id,"Custom PCM",setOf("multilingual"),true,experimental=true)}
-    override fun isAvailable(voice:VoiceRecord)=secure.get("custom_endpoint").isNotBlank()
+    override fun isAvailable(voice:VoiceRecord)=CloudContracts.validHttps(secure.get("custom_endpoint"))
     override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean){
-        val endpoint=secure.get("custom_endpoint");require(endpoint.isNotBlank()){ "Custom endpoint is not configured" }
+        val endpoint=CloudContracts.requireHttps(secure.get("custom_endpoint"),"Custom PCM endpoint")
         val headers=secure.get("custom_token").takeIf(String::isNotBlank)?.let{mapOf("Authorization" to "Bearer $it")}.orEmpty()
         val body=JSONObject().put("text",text).put("voice",session.voice.id.substringAfter('/').substringBefore('@')).put("language",session.language).put("speed",speed)
         var sequence=0;val range=TextRange(0,text.length);HttpAudio.postStream(endpoint,body,headers,cancelled){emit(AudioChunk(it,24000,range,sequence++))}

@@ -16,9 +16,17 @@ class GrokProvider(private val secure: SecureStore) : TtsProvider {
         return keyAvailable
     }
     private val ids = listOf("altair","ara","atlas","aurora","carina","castor","celeste","cosmo","eve","helios","helix","iris","kepler","leo","liora","lumen","luna","lux","naksh","orion","perseus","rex","rigel","sal","sirius","ursa","zagan","zenith")
-    override val voices = ids.map { voiceId -> VoiceRecord("grok/$voiceId@en-US", "${voiceId.replaceFirstChar(Char::uppercase)} · Grok", Locale.US, ProviderIds.GROK, "xAI TTS", Languages.grok, true) }
+    @Volatile private var catalog = ids.map { voiceId -> VoiceRecord("grok/$voiceId@en-US", "${voiceId.replaceFirstChar(Char::uppercase)} · Grok", Locale.US, ProviderIds.GROK, "xAI TTS", Languages.grok, true) }
+    override val voices get()=catalog
     override fun isAvailable(voice: VoiceRecord) = configured()
     override val availableVoices get()=if(configured())voices else emptyList()
+    override fun refresh(){
+        val key=secure.get("grok");if(key.isBlank())return
+        val root=JSONObject(String(HttpAudio.get("https://api.x.ai/v1/tts/voices",mapOf("Authorization" to "Bearer $key"))))
+        val array=root.optJSONArray("voices")?:return;val found=(0 until array.length()).mapNotNull{i->
+            val item=array.getJSONObject(i);val voiceId=item.optString("voice_id",item.optString("id"));if(voiceId.isBlank())null else VoiceRecord("grok/$voiceId@en-US","${item.optString("name",voiceId.replaceFirstChar(Char::uppercase))} · Grok",Locale.US,id,"xAI TTS",Languages.grok,true,item.optString("gender"))
+        };if(found.isNotEmpty())catalog=found
+    }
     override fun synthesize(voice: VoiceRecord, text: String, language: String, speed: Float, cancelled: AtomicBoolean): AudioData {
         val key = secure.get("grok"); require(key.isNotBlank()) { "Grok API key is not configured" }
         val body = JSONObject().put("text", text).put("voice_id", voice.id.substringAfter('/').substringBefore('@'))

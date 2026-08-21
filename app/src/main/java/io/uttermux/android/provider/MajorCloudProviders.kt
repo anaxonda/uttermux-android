@@ -42,7 +42,7 @@ class AwsPollyProvider(private val secure:SecureStore):TtsProvider {
         "$gender · AWS metered service",gender=gender,performanceClass="cloud",capabilities=setOf("streaming"),
     )
     override fun isAvailable(voice:VoiceRecord)=when(mode()){
-        "proxy"->secure.get("aws_proxy").isNotBlank();"cognito"->secure.get("aws_identity_pool").isNotBlank()
+        "proxy"->CloudContracts.validHttps(secure.get("aws_proxy"));"cognito"->secure.get("aws_identity_pool").isNotBlank()
         else->secure.get("aws_access_key").isNotBlank()&&secure.get("aws_secret_key").isNotBlank()
     }
     override fun refresh(){
@@ -63,20 +63,23 @@ class AwsPollyProvider(private val secure:SecureStore):TtsProvider {
         if(found.isNotEmpty())catalog=found.distinctBy{it.id}
     }
     private fun refreshProxy(){
-        val base=secure.get("aws_proxy").trimEnd('/');val array=JSONArray(String(HttpAudio.get("$base/v1/voices",proxyHeaders())))
+        val base=CloudContracts.requireHttps(secure.get("aws_proxy"),"AWS proxy");val array=JSONArray(String(HttpAudio.get("$base/v1/voices",proxyHeaders())))
         val found=(0 until array.length()).map{array.getJSONObject(it)}.map{voice(it.getString("id"),it.optString("language","en-US"),it.optString("gender"),it.optString("model","neural"))}
         if(found.isNotEmpty())catalog=found
     }
     override fun strategy(voice:VoiceRecord)=StreamStrategy.DIRECT_STREAM
     override fun stream(session:PreparedSession,text:String,speed:Float,pitch:Float,cancelled:AtomicBoolean,emit:(AudioChunk)->Boolean){
         if(mode()=="proxy"){
-            val base=secure.get("aws_proxy").trimEnd('/');val body=JSONObject().put("text",text).put("voice",externalVoice(session.voice)).put("model",engine(session.voice)).put("language",session.language).put("speed",speed)
+            val base=CloudContracts.requireHttps(secure.get("aws_proxy"),"AWS proxy");val body=JSONObject().put("text",text).put("voice",externalVoice(session.voice)).put("model",engine(session.voice)).put("language",session.language).put("speed",speed)
             var sequence=0;HttpAudio.postStream("$base/v1/synthesize",body,proxyHeaders(),cancelled){emit(AudioChunk(it,24_000,TextRange(0,text.length),sequence++))};return
         }
-        val body=JSONObject().put("Text",text).put("TextType","text").put("OutputFormat","pcm").put("SampleRate","24000")
-            .put("VoiceId",externalVoice(session.voice)).put("Engine",engine(session.voice)).put("LanguageCode",session.language).toString().toByteArray()
+        val voiceId=externalVoice(session.voice)
+        val payload=JSONObject().put("Text",text).put("TextType","text").put("OutputFormat","pcm").put("SampleRate","16000")
+            .put("VoiceId",voiceId).put("Engine",engine(session.voice))
+        if(voiceId=="Aditi"&&session.language.lowercase().startsWith("hi"))payload.put("LanguageCode","hi-IN")
+        val body=payload.toString().toByteArray()
         val request=AwsSigV4.request("POST","https://polly.${region()}.amazonaws.com/v1/speech",body,credentials(),region(),"polly","application/json")
-        var sequence=0;HttpAudio.executeStream(request,cancelled){emit(AudioChunk(it,24_000,TextRange(0,text.length),sequence++))}
+        var sequence=0;HttpAudio.executeStream(request,cancelled){emit(AudioChunk(it,16_000,TextRange(0,text.length),sequence++))}
     }
     private fun externalVoice(voice:VoiceRecord)=voice.id.substringAfter('/').substringBefore('/')
     private fun engine(voice:VoiceRecord)=voice.id.substringAfter('/').substringAfter('/').substringBefore('@')
@@ -127,10 +130,10 @@ class GoogleCloudProvider(private val context:Context,private val secure:SecureS
     private fun mode()=secure.get("google_auth_mode").ifBlank{"direct"}
     private fun voice(name:String,locale:String,gender:String)=VoiceRecord("$id/$name@$locale","$name · Google",Locale.forLanguageTag(locale),id,model(name),setOf(locale),true,"$gender · Google metered service",gender=gender,performanceClass="cloud")
     private fun model(name:String)=when{ "Chirp3" in name->"Chirp 3 HD";"Neural2" in name->"Neural2";"Wavenet" in name||"WaveNet" in name->"WaveNet";else->"Standard" }
-    override fun isAvailable(voice:VoiceRecord)=if(mode()=="proxy")secure.get("google_proxy").isNotBlank()else secure.get("google_api_key").isNotBlank()
+    override fun isAvailable(voice:VoiceRecord)=CloudContracts.configured(id){secure.get(it)}
     override fun refresh(){
         if(!isAvailable(catalog.first()))return
-        val bytes=if(mode()=="proxy")HttpAudio.get("${secure.get("google_proxy").trimEnd('/')}/v1/voices",proxyHeaders()) else HttpAudio.get("https://texttospeech.googleapis.com/v1/voices?key=${URLEncoder.encode(secure.get("google_api_key"),"UTF-8")}",androidKeyHeaders())
+        val bytes=if(mode()=="proxy")HttpAudio.get("${CloudContracts.requireHttps(secure.get("google_proxy"),"Google proxy")}/v1/voices",proxyHeaders()) else HttpAudio.get("https://texttospeech.googleapis.com/v1/voices?key=${URLEncoder.encode(secure.get("google_api_key"),"UTF-8")}",androidKeyHeaders())
         val root=runCatching{JSONObject(String(bytes)).optJSONArray("voices")}.getOrNull()?:JSONArray(String(bytes));val found=mutableListOf<VoiceRecord>()
         for(i in 0 until root.length()){
             val item=root.getJSONObject(i);val name=item.getString("name");val gender=item.optString("ssmlGender",item.optString("gender")).lowercase();val languages=item.optJSONArray("languageCodes")
@@ -143,7 +146,7 @@ class GoogleCloudProvider(private val context:Context,private val secure:SecureS
         val name=session.voice.id.substringAfter('/').substringBefore('@')
         if(mode()=="proxy"){
             val body=JSONObject().put("text",text).put("voice",name).put("language",session.language).put("speed",speed)
-            var sequence=0;HttpAudio.postStream("${secure.get("google_proxy").trimEnd('/')}/v1/synthesize",body,proxyHeaders(),cancelled){emit(AudioChunk(it,24_000,TextRange(0,text.length),sequence++))};return
+            var sequence=0;HttpAudio.postStream("${CloudContracts.requireHttps(secure.get("google_proxy"),"Google proxy")}/v1/synthesize",body,proxyHeaders(),cancelled){emit(AudioChunk(it,24_000,TextRange(0,text.length),sequence++))};return
         }
         val body=JSONObject().put("input",JSONObject().put("text",text)).put("voice",JSONObject().put("name",name).put("languageCode",session.language))
             .put("audioConfig",JSONObject().put("audioEncoding","LINEAR16").put("sampleRateHertz",24000).put("speakingRate",speed.coerceIn(.25f,2f)))

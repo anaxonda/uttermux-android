@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Audited every cloud adapter against its provider contract; corrected Polly,
+  Azure, Qwen Realtime, Deepgram, Cartesia, PlayHT, OpenAI, and HTTPS proxy
+  request behavior and added live xAI voice discovery.
+- Provider cards now report Configured only when the selected authentication
+  mode has all required credentials and valid HTTPS endpoints.
 - Restored the official MOSS-TTS-Nano FP32 ONNX runtime as an explicit
   heavy/experimental download for faster arm64 devices; no weights are bundled
   and it is never selected automatically.
