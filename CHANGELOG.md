@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Moved voice filtering to a dedicated screen and refreshed app screenshots.
+- Added direct active-voice selection to installed-model test cards.
+- Documented shared catalog ownership, Linux interoperability, and remaining
+  F-Droid release blockers.
+
 ## 0.4.0-beta.2 - 2026-08-21
 
 - Fixed paused local streams starving subsequent voices and previews.

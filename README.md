@@ -4,6 +4,8 @@
 
 [![Android CI](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml/badge.svg)](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml)
 
+Linux desktop and Speech Dispatcher backend: [`anaxonda/uttermux-linux`](https://github.com/anaxonda/uttermux-linux)
+
 UtterMux is an Android system text-to-speech engine and voice manager. It gives
 Android readers one interface for local ONNX models and online providers, and
 also implements the loopback protocol used by KOReader's `TTS.koplugin`.
@@ -11,9 +13,9 @@ also implements the loopback protocol used by KOReader's `TTS.koplugin`.
 > **Status:** beta. No model weights are bundled. Local artifacts are downloaded
 > only after the user selects Install.
 
-| Voices and filters | Voice creation | Settings and providers |
-| --- | --- | --- |
-| <img src="docs/screenshots/android-voices.png" width="280" alt="UtterMux voice filters and active voice"> | <img src="docs/screenshots/android-create.png" width="280" alt="UtterMux Pocket voice creation"> | <img src="docs/screenshots/android-settings.png" width="280" alt="UtterMux settings and provider list"> |
+| Voice catalog | Dedicated filters | Voice creation | Settings and providers |
+| --- | --- | --- | --- |
+| <img src="docs/screenshots/android-voices.png" width="240" alt="UtterMux active voice and voice catalog"> | <img src="docs/screenshots/android-filters.png" width="240" alt="UtterMux dedicated voice filters"> | <img src="docs/screenshots/android-create.png" width="240" alt="UtterMux Pocket voice creation"> | <img src="docs/screenshots/android-settings.png" width="240" alt="UtterMux settings and provider list"> |
 
 ## What works
 
@@ -44,16 +46,18 @@ excluded from backup and device transfer.
 
 ## App navigation
 
-- **Voices** searches voice name, language, library, model/version, and accent;
-  filters local/cloud readiness and capability; installs, previews, and selects
-  the default voice. Searchable pickers open their list on the first tap and the
-  keyboard only on a second tap or the search icon.
+- **Voices** shows the active voice, filtered result count, and voice cards. A
+  separate **Filters** screen searches voice name, language, library,
+  model/version, and accent and filters on-device/cloud readiness, capability,
+  cost, performance, gender, and size/speed order. Searchable pickers open their
+  list before opening the keyboard.
 - **Create** records or imports a permitted reference sample for Pocket or the
   Qwen device-preview runtime, previews source and generated audio, and manages
   engine-specific private profiles.
 - **Test** previews installed local voices and benchmarks each exact model
   artifact on the current device. An installed voice card's **Test model**
-  button opens this page with that artifact first.
+  button opens this page with that artifact first. A tested voice can be made
+  active directly from the same card.
 - **Settings** contains general integration, individually expandable online
   service cards, language routing, downloaded-model storage, explained advanced
   playback controls, diagnostics, and privacy/version information.
@@ -75,7 +79,7 @@ means a reference recording must be configured before a system voice exists.
 
 | Family | Android | Linux | Current boundary |
 | --- | --- | --- | --- |
-| Piper/VITS | Yes; dynamic upstream catalog | Yes; Lessac medium in the built-in catalog | Fixed voices |
+| Piper/VITS | Yes; generated pinned catalog | Yes; generated pinned catalog | Fixed voices |
 | Inflect Nano/Micro | Nano and Micro | Nano | Fixed English voices |
 | Kitten | FP16 v0.1 and INT8 v0.8 | FP16 v0.1 and INT8 v0.8 | Fixed English voices |
 | Matcha | Yes | Yes | LJSpeech + Vocos artifact |
@@ -176,6 +180,11 @@ Families, runnable variants, voices, and artifacts are separate records, so
 Linux and Android can use different runtimes for one model family without
 presenting unsupported rows on either platform. The build validates the schema
 and requires the pinned Android Qwen device-preview variant.
+
+Cloud catalogs are different: account, region, and API changes make a committed
+voice snapshot stale. Each provider adapter discovers its live voices and
+overlays credential/readiness state at runtime. See the Linux project's
+[catalog architecture](https://github.com/anaxonda/uttermux-linux/blob/main/docs/CATALOG.md).
 
 ## Adaptive streaming
 

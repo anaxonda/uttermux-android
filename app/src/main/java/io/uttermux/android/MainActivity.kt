@@ -3,6 +3,7 @@ package io.uttermux.android
 import android.Manifest
 import android.content.Intent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,13 +47,14 @@ class MainActivity:ComponentActivity(){
     }
 }
 
-private enum class Page(val label:String){VOICES("Voices"),CREATE("Create"),TUNE("Test"),SETTINGS("Settings")}
+private enum class Page(val label:String){VOICES("Voices"),FILTERS("Filters"),CREATE("Create"),TUNE("Test"),SETTINGS("Settings")}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun UtterMuxManager(theme:String,onTheme:(String)->Unit){
     val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by rememberSaveable{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")};var voiceCatalog by remember{mutableStateOf<VoiceCatalogUi?>(null)};var testArtifact by rememberSaveable{mutableStateOf("")}
     val previewState by PreviewController.state.collectAsState();val previewBusy=previewState.phase in setOf("loading","playing")
     val filters=rememberVoiceFilterState();val voiceListState=rememberLazyListState()
+    BackHandler(page==Page.FILTERS){page=Page.VOICES}
     LaunchedEffect(revision){voiceCatalog=withContext(Dispatchers.Default){buildVoiceCatalog(app)}}
     fun refresh(){scope.launch{status="Refreshing catalogs…";val errors=withContext(Dispatchers.IO){app.refreshCatalogs()};revision++;status=if(errors.isEmpty())"Catalogs refreshed" else errors.joinToString()}}
     Scaffold(topBar={TopAppBar(title={Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){if(previewState.phase=="loading")CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp);Column{Text("UtterMux");Text(if(previewBusy)previewState.message else status,style=MaterialTheme.typography.labelSmall)}}})},bottomBar={NavigationBar{
@@ -61,7 +63,8 @@ private enum class Page(val label:String){VOICES("Voices"),CREATE("Create"),TUNE
         NavigationBarItem(selected=page==Page.TUNE,onClick={testArtifact="";page=Page.TUNE},icon={Text("⌁")},label={Text("Test")})
         NavigationBarItem(selected=page==Page.SETTINGS,onClick={page=Page.SETTINGS},icon={Text("⚙")},label={Text("Settings")})
     }}){padding->Box(Modifier.padding(padding)){when(page){
-        Page.VOICES->VoicesPage(revision,voiceCatalog,filters,voiceListState,{revision++},{artifact->testArtifact=artifact;page=Page.TUNE},{status=it})
+        Page.VOICES->VoicesPage(revision,voiceCatalog,filters,voiceListState,{page=Page.FILTERS},{revision++},{artifact->testArtifact=artifact;page=Page.TUNE},{status=it})
+        Page.FILTERS->FilterPage(voiceCatalog,filters){page=Page.VOICES}
         Page.CREATE->CreateVoicePage(revision,{revision++},{status=it})
         Page.TUNE->BenchmarkPage(testArtifact){status=it}
         Page.SETTINGS->ModernSettingsPage(revision,theme,onTheme,{refresh()},{revision++},{status=it})
@@ -96,7 +99,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
     return VoiceCatalogUi(entries,voices,languages,libraries,models,accents,performances,genders,capabilities,app.router.effectiveDefault())
 }
 
-@Composable private fun VoicesPage(revision:Int,snapshot:VoiceCatalogUi?,filters:VoiceFilterState,listState:LazyListState,onChanged:()->Unit,onTest:(String)->Unit,onStatus:(String)->Unit){
+@Composable private fun VoicesPage(revision:Int,snapshot:VoiceCatalogUi?,filters:VoiceFilterState,listState:LazyListState,onFilters:()->Unit,onChanged:()->Unit,onTest:(String)->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance
     var defaultVoice by rememberSaveable{mutableStateOf(app.settings.defaultVoice)};var shown by remember{mutableStateOf<List<VoiceSearchEntry>>(emptyList())}
     LaunchedEffect(revision){defaultVoice=app.settings.defaultVoice}
@@ -109,9 +112,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
     val selected=snapshot.entries.firstOrNull{it.voice.id==defaultVoice&&it.ready}?.voice;val effectiveDefault=selected?:snapshot.effectiveDefault
     val configuredReady=selected!=null
     val activity by VoiceActivity.state.collectAsState()
-    fun clearFilters(){filters.clear()}
     val filtersActive=listOf(filters.voiceSearch,filters.languageSearch,filters.librarySearch,filters.modelSearch,filters.accentSearch).any(String::isNotBlank)||listOf(filters.locality,filters.readiness,filters.performance,filters.gender,filters.capability,filters.cost).any{it!="all"}||filters.sort!="name"
-    val modelOptions=remember(snapshot.models,filters.librarySearch){if(filters.librarySearch.isBlank())snapshot.models else snapshot.entries.filter{it.library.contains(filters.librarySearch,true)}.map{Suggestion(it.model,it.model)}.distinctBy{it.value}.sortedBy{it.label}}
     LazyColumn(Modifier.fillMaxSize().padding(12.dp),state=listState,verticalArrangement=Arrangement.spacedBy(8.dp)){
         if(snapshot.entries.none{it.ready})item{Card{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text("No voice is installed or configured",style=MaterialTheme.typography.titleMedium);Text("Download an offline voice below or configure an online provider in Settings. UtterMux intentionally bundles no voice model.");Button(onClick={app.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}){Text("Android TTS settings")}}}}
         if(!configuredReady&&effectiveDefault!=null)item{Card{Text("Configured default is unavailable. Currently using ${effectiveDefault.name}; the saved preference will be restored automatically if its provider becomes available.",Modifier.padding(12.dp))}}
@@ -121,7 +122,17 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
             Text(when(activity.status){"speaking"->"Speaking in ${activity.language} for ${activity.client}";"warming"->"Loading voice";else->"Configured default: ${selected?.name?:app.settings.defaultVoice}"},style=MaterialTheme.typography.bodySmall)
             if(activity.fallbackReason.isNotBlank())Text(activity.fallbackReason,style=MaterialTheme.typography.labelSmall)
         }}}
-        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Find a voice",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(enabled=filtersActive,onClick=::clearFilters){Text("Clear filters")}}}
+        item{Card(Modifier.fillMaxWidth()){Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){Column(Modifier.weight(1f)){Text("Voice catalog",style=MaterialTheme.typography.titleMedium);Text(if(filtersActive)"Filters active · ${shown.size} results" else "${shown.size} voices · all locations",style=MaterialTheme.typography.bodySmall)};OutlinedButton(onClick=onFilters){Text(if(filtersActive)"Edit filters" else "Filter")}}}}
+        items(shown,key={it.voice.id}){entry->val voice=entry.voice;VoiceCard(voice,"${entry.library} · ${entry.model}",entry.ready,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},onTest,{onStatus(it)})}
+    }
+}
+
+@Composable private fun FilterPage(snapshot:VoiceCatalogUi?,filters:VoiceFilterState,onDone:()->Unit){
+    if(snapshot==null){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};return}
+    val modelOptions=remember(snapshot.models,filters.librarySearch){if(filters.librarySearch.isBlank())snapshot.models else snapshot.entries.filter{it.library.contains(filters.librarySearch,true)}.map{Suggestion(it.model,it.model)}.distinctBy{it.value}.sortedBy{it.label}}
+    LazyColumn(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){Text("Filter voices",Modifier.weight(1f),style=MaterialTheme.typography.headlineSmall);TextButton(onClick={filters.clear()}){Text("Clear all")}}}
+        item{Text("Choose exact fields or type a search. Results update when you return to Voices.",style=MaterialTheme.typography.bodySmall)}
         item{SuggestionSearchField("Voice or keyword",filters.voiceSearch,snapshot.voices){filters.voiceSearch=it}}
         item{SuggestionSearchField("Language",filters.languageSearch,snapshot.languages){filters.languageSearch=it}}
         item{SuggestionSearchField("Voice library",filters.librarySearch,snapshot.libraries){filters.librarySearch=it;filters.modelSearch=""}}
@@ -131,8 +142,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
         item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Performance",filters.performance,listOf("all")+snapshot.performances){filters.performance=it}};Box(Modifier.weight(1f)){Selector("Gender",filters.gender,listOf("all")+snapshot.genders){filters.gender=it}}}}
         item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Capability",filters.capability,listOf("all")+snapshot.capabilities){filters.capability=it}};Box(Modifier.weight(1f)){Selector("Cost",filters.cost,listOf("all","free","metered","subscription")){filters.cost=it}}}}
         item{Selector("Sort",filters.sort,listOf("name","library","smallest","fastest")){filters.sort=it}}
-        item{Text("${shown.size} of ${snapshot.entries.size} voices",style=MaterialTheme.typography.bodySmall)}
-        items(shown,key={it.voice.id}){entry->val voice=entry.voice;VoiceCard(voice,"${entry.library} · ${entry.model}",entry.ready,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},onTest,{onStatus(it)})}
+        item{Button(onClick=onDone,modifier=Modifier.fillMaxWidth()){Text("Show voices")}}
     }
 }
 
