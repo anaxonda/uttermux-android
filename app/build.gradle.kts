@@ -9,8 +9,8 @@ android {
         applicationId = "io.uttermux.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0-beta.1"
+        versionCode = 5
+        versionName = "0.4.0-beta.2"
         testInstrumentationRunner = "io.uttermux.android.SafeTestRunner"
         testInstrumentationRunnerArguments["notAnnotation"] = "io.uttermux.android.OptInDeviceTest"
         ndk { abiFilters += "arm64-v8a" }
