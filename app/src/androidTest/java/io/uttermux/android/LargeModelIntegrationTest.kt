@@ -36,10 +36,15 @@ class LargeModelIntegrationTest {
             val loadStart=android.os.SystemClock.elapsedRealtime()
             assertTrue(engine.lastError(),engine.loadModels(modelRoot.absolutePath,"qwen-talker-0.6b-base-Q4_K_M.gguf"))
             val loadedMs=android.os.SystemClock.elapsedRealtime()-loadStart
+            val embedding=File(app.cacheDir,"qwen-benchmark-speaker.bin")
+            val prepareStart=android.os.SystemClock.elapsedRealtime()
+            assertTrue(engine.lastError(),engine.extractSpeakerEmbedding(reference.absolutePath,embedding.absolutePath))
+            val preparedMs=android.os.SystemClock.elapsedRealtime()-prepareStart
+            assertTrue("Prepared Qwen speaker embedding is empty",embedding.length()>0)
             repeat(2){run->
                 var frames=0L;var sampleRate=0;var firstMs=-1L
                 val began=android.os.SystemClock.elapsedRealtime()
-                val result=engine.stream("UtterMux measures Qwen synthesis speed on this Android device.",referenceWav=reference.absolutePath,
+                val result=engine.stream("UtterMux measures Qwen synthesis speed on this Android device.",speakerEmbedding=embedding.absolutePath,
                     params=QwenEngine.NativeParams(languageId=2050,maxAudioTokens=128)){samples,rate,_,_,_,_,_,_,_,_->
                     if(firstMs<0)firstMs=android.os.SystemClock.elapsedRealtime()-began
                     frames+=samples.size;sampleRate=rate;true
@@ -47,8 +52,9 @@ class LargeModelIntegrationTest {
                 val wallMs=android.os.SystemClock.elapsedRealtime()-began
                 assertTrue(result.errorMsg,result.success);assertTrue(frames>0&&sampleRate>0)
                 val seconds=frames.toDouble()/sampleRate
-                Log.i("UtterMuxBenchmark","Qwen load=${loadedMs}ms run=${run+1} first=${firstMs}ms wall=${wallMs}ms audio=${"%.3f".format(seconds)}s rtf=${"%.3f".format(wallMs/1000.0/seconds)} pssKb=${android.os.Debug.getPss()}")
+                Log.i("UtterMuxBenchmark","Qwen load=${loadedMs}ms prepare=${preparedMs}ms run=${run+1} first=${firstMs}ms wall=${wallMs}ms audio=${"%.3f".format(seconds)}s rtf=${"%.3f".format(wallMs/1000.0/seconds)} pssKb=${android.os.Debug.getPss()}")
             }
+            embedding.delete()
         }
     }
 
