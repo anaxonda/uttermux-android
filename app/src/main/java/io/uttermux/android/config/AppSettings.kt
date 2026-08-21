@@ -24,15 +24,15 @@ class AppSettings(context: Context) {
         get()=prefs.getInt("model_cache_size",1)
         set(value){prefs.edit().putInt("model_cache_size",value.coerceIn(1,3)).apply()}
     var pocketNumSteps:Int
-        get()=prefs.getInt("pocket_num_steps_v2",3)
-        set(value){prefs.edit().putInt("pocket_num_steps_v2",value.coerceIn(3,5)).apply()}
+        get()=prefs.getInt("pocket_num_steps_v3",2)
+        set(value){prefs.edit().putInt("pocket_num_steps_v3",value.coerceIn(1,5)).apply()}
     var engineThreads:Int
         get()=prefs.getInt("engine_threads",0)
         set(value){prefs.edit().putInt("engine_threads",value.takeIf{it in setOf(1,2,4)}?:0).apply()}
     var paidPreviewConfirmed:Boolean
         get()=prefs.getBoolean("paid_preview_confirmed",false)
         set(value){prefs.edit().putBoolean("paid_preview_confirmed",value).apply()}
-    fun resetAdvanced(){prefs.edit().putString("latency_profile","automatic").putInt("manual_startup_ms",300).putInt("model_cache_size",1).putInt("pocket_num_steps_v2",3).putInt("engine_threads",0).apply()}
+    fun resetAdvanced(){prefs.edit().putString("latency_profile","automatic").putInt("manual_startup_ms",300).putInt("model_cache_size",1).putInt("pocket_num_steps_v3",2).putInt("engine_threads",0).apply()}
     fun route(language: String): String = prefs.getString("route.${Languages.normalized(language)}", "")!!
     fun setRoute(language: String, voice: String) = prefs.edit().putString("route.${Languages.normalized(language)}", voice).apply()
     fun routeChain(language:String):List<String> = prefs.getString("route_chain.${Languages.normalized(language)}","")!!.split('\n').filter(String::isNotBlank)

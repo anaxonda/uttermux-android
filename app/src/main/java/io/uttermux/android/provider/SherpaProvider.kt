@@ -212,6 +212,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         // finishes. Keep a smaller startup window for the fast preset and a
         // little more reserve for the slower, higher-quality presets.
         val chunkSize=when(settings.pocketNumSteps){
+            1->1
+            2->2
             3->4
             4->10
             else->15
@@ -220,7 +222,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     }
     private fun create(model:LocalModel,root:File,language:String):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath
-        val config=OfflineTtsModelConfig(numThreads=settings.engineThreads.takeIf{it>0}?:4)
+        val automaticThreads=if(model.engine=="pocket")2 else 4
+        val config=OfflineTtsModelConfig(numThreads=settings.engineThreads.takeIf{it>0}?:automaticThreads)
         when(model.engine){
             "vits"->config.vits=OfflineTtsVitsModelConfig(model=path(model.model),tokens=path(model.tokens),dataDir=path(model.dataDir))
             "matcha"->config.matcha=OfflineTtsMatchaModelConfig(acousticModel=path(model.model),vocoder=path(model.secondaryFile),tokens=path(model.tokens),dataDir=path(model.dataDir),lexicon=path(model.lexicon))

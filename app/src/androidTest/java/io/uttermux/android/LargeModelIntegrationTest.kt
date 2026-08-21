@@ -91,6 +91,47 @@ class LargeModelIntegrationTest {
         }finally{app.settings.pocketNumSteps=old}
     }
 
+    @Test fun pocketAndKokoroOptimizationMatrix(){
+        val prefs=app.getSharedPreferences("settings",android.content.Context.MODE_PRIVATE)
+        val oldSteps=prefs.getInt("pocket_num_steps_v3",2);val oldThreads=prefs.getInt("engine_threads",0)
+        val pocket=app.router.voices.first{it.model=="Pocket TTS INT8"};val kokoro=app.router.voices.first{it.downloadId=="kokoro-multi-lang-v1_1"&&it.locale.toLanguageTag()=="en-US"}
+        assertTrue(app.router.isAvailable(pocket));assertTrue(app.router.isAvailable(kokoro))
+        val text="A controlled benchmark measures sustained local speech generation on this phone."
+        try{
+            for((voice,steps) in listOf(pocket to 1,pocket to 2,pocket to 3,kokoro to 0))for(threads in listOf(1,2,4)){
+                prefs.edit().putInt("engine_threads",threads).putInt("pocket_num_steps_v3",steps.coerceAtLeast(1)).commit()
+                app.providers.forEach{it.trimMemory()}
+                val began=android.os.SystemClock.elapsedRealtime();val audio=app.router.synthesizeExact(voice.id,text,"en-US",1f,AtomicBoolean())
+                val wall=android.os.SystemClock.elapsedRealtime()-began;val seconds=audio.pcm16.size/2.0/audio.sampleRate;val rtf=wall/1000.0/seconds
+                Log.i("UtterMuxOptimization","model=${voice.model} steps=$steps threads=$threads wallMs=$wall audio=${"%.3f".format(seconds)} rtf=${"%.3f".format(rtf)} pssKb=${android.os.Debug.getPss()}")
+                assertTrue("${voice.model} returned invalid audio",audio.pcm16.size>audio.sampleRate&&audio.pcm16.size%2==0)
+            }
+        }finally{prefs.edit().putInt("pocket_num_steps_v3",oldSteps).putInt("engine_threads",oldThreads).commit();app.providers.forEach{it.trimMemory()}}
+    }
+
+    @Test fun pocketAndKokoroSustainedThermalMatrix(){
+        val prefs=app.getSharedPreferences("settings",android.content.Context.MODE_PRIVATE)
+        val oldSteps=prefs.getInt("pocket_num_steps_v3",2);val oldThreads=prefs.getInt("engine_threads",0)
+        val pocket=app.router.voices.first{it.model=="Pocket TTS INT8"};val kokoro=app.router.voices.first{it.downloadId=="kokoro-multi-lang-v1_1"&&it.locale.toLanguageTag()=="en-US"}
+        val passages=listOf(
+            "The first passage establishes a warm model for sustained reading.",
+            "A second passage measures whether generation remains ahead of playback.",
+            "Repeated requests reveal heat and scheduling behavior hidden by one benchmark.",
+            "Document readers require stable throughput across every submitted section.",
+            "The final passage records sustained performance rather than cold startup alone.")
+        try{
+            for((voice,steps,threads) in listOf(Triple(pocket,1,2),Triple(pocket,2,2),Triple(kokoro,0,2),Triple(kokoro,0,4))){
+                prefs.edit().putInt("engine_threads",threads).putInt("pocket_num_steps_v3",steps.coerceAtLeast(1)).commit();app.providers.forEach{it.trimMemory()}
+                passages.forEachIndexed{index,text->
+                    val began=android.os.SystemClock.elapsedRealtime();val audio=app.router.synthesizeExact(voice.id,text,"en-US",1f,AtomicBoolean())
+                    val wall=android.os.SystemClock.elapsedRealtime()-began;val seconds=audio.pcm16.size/2.0/audio.sampleRate
+                    Log.i("UtterMuxThermal","model=${voice.model} steps=$steps threads=$threads run=${index+1} wallMs=$wall audio=${"%.3f".format(seconds)} rtf=${"%.3f".format(wall/1000.0/seconds)} pssKb=${android.os.Debug.getPss()}")
+                    assertTrue("${voice.model} returned invalid audio",audio.pcm16.size>audio.sampleRate&&audio.pcm16.size%2==0)
+                }
+            }
+        }finally{prefs.edit().putInt("pocket_num_steps_v3",oldSteps).putInt("engine_threads",oldThreads).commit();app.providers.forEach{it.trimMemory()}}
+    }
+
     @Test fun pocketSequentialStreamRequests(){
         val voice=app.router.voices.first{it.model=="Pocket TTS INT8"};assertTrue(app.router.isAvailable(voice));val provider=app.providers.first{it.id==voice.provider};provider.warm(voice);val old=app.settings.pocketNumSteps
         try{for(steps in 3..5){app.settings.pocketNumSteps=steps;repeat(3){index->

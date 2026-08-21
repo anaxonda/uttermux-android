@@ -267,8 +267,8 @@ are local engineering measurements, not upstream claims.
 | --- | --- | --- | --- |
 | Piper Alan Low | ~2.1 s first audio cold; ~0.33 s warm | model-dependent | Best tested continuity |
 | Kitten Nano INT8 | ~2.95 s generation for ~3.70 s audio, RTF ~0.80 | ~45 MB installed in the tested package | Realtime-capable |
-| Pocket INT8, 3 steps | cold RTF ~1.35; warm first PCM ~243–262 ms | ~201 MB installed; Pocket-loaded process ~598 MB PSS | Works, but client request boundaries can remain audible |
-| Kokoro FP32 | ~6.06 s generation for ~3.16 s audio, RTF ~1.91 | ~408 MB installed | Too slow for seamless document reading on this phone |
+| Pocket INT8, 2 steps, 2 threads | cold RTF ~0.99; sustained warm RTF ~0.47–0.48 | 641–659 MB test-process PSS | Default for this device class; model throughput is sufficient, but client request boundaries may remain audible |
+| Kokoro v1.1 FP32, 4 threads | cold RTF ~1.84; sustained warm RTF ~1.06–1.13 | 663–692 MB test-process PSS | Slightly slower than realtime after warm-up; not suitable for seamless document reading on this phone |
 | MOSS INT8 | sustained RTF ~1.41–1.47 | test artifact removed | Rejected for this release |
 
 Measurements use short fixed passages after a clean install and again with a
