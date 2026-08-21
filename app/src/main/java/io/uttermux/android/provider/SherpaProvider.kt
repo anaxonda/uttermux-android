@@ -201,7 +201,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     }
     override fun trimMemory(){synchronized(runtimeLock){synchronized(engines){engines.values.forEach(OfflineTts::release);engines.clear()};synchronized(references){references.clear()};synchronized(warmedReferences){warmedReferences.clear()}}}
     private fun generationConfig(spec:Spec,speed:Float):GenerationConfig {
-        if(spec.referenceFile.isBlank())return GenerationConfig(speed=speed,sid=spec.speaker)
+        if(spec.referenceFile.isBlank())return GenerationConfig(silenceScale=settings.effectiveSilenceScale(spec.model),speed=speed,sid=spec.speaker,
+            numSteps=if(manager.model(spec.model).engine=="zipvoice")settings.effectiveZipSteps(spec.model)else 5)
         val reference=synchronized(references){references.getOrPut("${spec.model}/${spec.referenceFile}"){
             val requested=File(spec.referenceFile);val file=if(requested.isAbsolute)requested else File(File(manager.root,spec.model),spec.referenceFile);require(file.isFile){"Pocket reference audio is missing; reinstall the model or recreate the profile"}
             val audio=CompressedAudioDecoder.decode(context,file.readBytes(),"wav")
@@ -213,14 +214,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         // finishes. Keep a smaller startup window for the fast preset and a
         // little more reserve for the slower, higher-quality presets.
         val pocketSteps=settings.effectivePocketSteps(spec.model)
-        val chunkSize=when(pocketSteps){
-            1->1
-            2->2
-            3->4
-            4->10
-            else->15
-        }
-        return GenerationConfig(speed=speed,sid=spec.speaker,referenceAudio=reference.samples,referenceSampleRate=reference.sampleRate,numSteps=pocketSteps,extra=mapOf("chunk_size" to chunkSize.toString()))
+        val chunkSize=settings.effectivePocketChunk(spec.model,pocketSteps)
+        return GenerationConfig(silenceScale=settings.effectiveSilenceScale(spec.model),speed=speed,sid=spec.speaker,referenceAudio=reference.samples,referenceSampleRate=reference.sampleRate,numSteps=pocketSteps,extra=mapOf("chunk_size" to chunkSize.toString()))
     }
     private fun create(model:LocalModel,root:File,language:String):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath

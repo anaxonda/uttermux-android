@@ -37,6 +37,15 @@ class AppSettings(context: Context) {
     fun modelPocketSteps(artifactId:String)=prefs.getInt("model_override.$artifactId.pocket_steps",0)
     fun setModelPocketSteps(artifactId:String,value:Int){val edit=prefs.edit();if(value in 1..5)edit.putInt("model_override.$artifactId.pocket_steps",value)else edit.remove("model_override.$artifactId.pocket_steps");edit.apply()}
     fun effectivePocketSteps(artifactId:String)=modelPocketSteps(artifactId).takeIf{it>0}?:pocketNumSteps
+    fun modelSilencePercent(artifactId:String)=prefs.getInt("model_override.$artifactId.silence_percent",-1)
+    fun setModelSilencePercent(artifactId:String,value:Int){val edit=prefs.edit();if(value in 0..200)edit.putInt("model_override.$artifactId.silence_percent",value)else edit.remove("model_override.$artifactId.silence_percent");edit.apply()}
+    fun effectiveSilenceScale(artifactId:String)=modelSilencePercent(artifactId).takeIf{it>=0}?.div(100f)?:.2f
+    fun modelPocketChunk(artifactId:String)=prefs.getInt("model_override.$artifactId.pocket_chunk",0)
+    fun setModelPocketChunk(artifactId:String,value:Int){val edit=prefs.edit();if(value in 1..16)edit.putInt("model_override.$artifactId.pocket_chunk",value)else edit.remove("model_override.$artifactId.pocket_chunk");edit.apply()}
+    fun effectivePocketChunk(artifactId:String,steps:Int):Int=modelPocketChunk(artifactId).takeIf{it>0}?:when(steps){1->1;2->2;3->4;4->10;else->15}
+    fun modelZipSteps(artifactId:String)=prefs.getInt("model_override.$artifactId.zip_steps",0)
+    fun setModelZipSteps(artifactId:String,value:Int){val edit=prefs.edit();if(value in 1..8)edit.putInt("model_override.$artifactId.zip_steps",value)else edit.remove("model_override.$artifactId.zip_steps");edit.apply()}
+    fun effectiveZipSteps(artifactId:String)=modelZipSteps(artifactId).takeIf{it>0}?:4
     fun effectiveThreads(artifactId:String,fingerprint:String="")=benchmarkThreads[artifactId]?:modelThreads(artifactId).takeIf{it>0}?:tunedThreads(artifactId,fingerprint)
     fun threadSource(artifactId:String,fingerprint:String="")=when{
         benchmarkThreads.containsKey(artifactId)->"Benchmark run"
@@ -50,7 +59,7 @@ class AppSettings(context: Context) {
         val edit=prefs.edit();val key="tuning.$artifactId.threads";val fingerprintKey="tuning.$artifactId.fingerprint"
         if(value in 1..16){edit.putInt(key,value);edit.putString(fingerprintKey,fingerprint)}else{edit.remove(key);edit.remove(fingerprintKey)};edit.apply()
     }
-    fun resetModelOverrides(artifactId:String){prefs.edit().remove("model_override.$artifactId.threads").remove("model_override.$artifactId.pocket_steps").apply()}
+    fun resetModelOverrides(artifactId:String){prefs.edit().remove("model_override.$artifactId.threads").remove("model_override.$artifactId.pocket_steps").remove("model_override.$artifactId.silence_percent").remove("model_override.$artifactId.pocket_chunk").remove("model_override.$artifactId.zip_steps").apply()}
     var paidPreviewConfirmed:Boolean
         get()=prefs.getBoolean("paid_preview_confirmed",false)
         set(value){prefs.edit().putBoolean("paid_preview_confirmed",value).apply()}

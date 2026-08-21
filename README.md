@@ -271,8 +271,9 @@ confirms.
 
 Applied profiles are bound to a combined catalog-artifact and app-runtime
 fingerprint, and are ignored after either changes. **Test & tune → Model
-settings** can override threads and, for Pocket, refinement steps for one exact
-downloaded artifact. Precedence is: an active benchmark run, a manual model
+settings** exposes only controls consumed by that artifact's runtime: threads
+and generated-silence scaling for sherpa models, Pocket refinement and decoder
+chunk size, and ZipVoice generation steps. Precedence is: an active benchmark run, a manual model
 override, a valid tuned profile, the global default, then Automatic. Playback
 buffering and the loaded-model cache remain global. Pocket refinement and other
 quality controls are never changed by the benchmark.
