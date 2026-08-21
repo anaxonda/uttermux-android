@@ -32,9 +32,11 @@ class QwenLocalRuntime(private val context:Context,private val manager:ModelMana
         val began=System.nanoTime();var sequence=0
         val profileId=session.voice.id.substringAfter("/custom-","").substringBefore('@')
         var profile=profiles.profiles().firstOrNull{it.id==profileId}?:error("Qwen voice profile is missing")
-        var embedding=profile.speakerEmbeddingFile.takeIf{it.isNotBlank()&&File(it).isFile}
+        // Upstream's binary loader guesses JSON if arbitrary float bytes contain
+        // '['. Use its explicit JSON format to avoid probabilistic load failures.
+        var embedding=profile.speakerEmbeddingFile.takeIf{it.endsWith(".json")&&File(it).isFile}
         if(embedding==null){
-            val output=profiles.artifactPath(profile,"speaker-embedding")
+            val output=profiles.artifactPath(profile,"speaker-embedding","json")
             check(loaded().extractSpeakerEmbedding(profile.referenceFile,output.absolutePath)){loaded().lastError()?:"Could not prepare Qwen speaker embedding"}
             profile=profiles.setPreparedArtifacts(profile.id,speakerEmbedding=output);embedding=profile.speakerEmbeddingFile
         }

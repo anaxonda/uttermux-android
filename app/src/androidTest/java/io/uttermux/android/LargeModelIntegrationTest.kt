@@ -36,7 +36,7 @@ class LargeModelIntegrationTest {
             val loadStart=android.os.SystemClock.elapsedRealtime()
             assertTrue(engine.lastError(),engine.loadModels(modelRoot.absolutePath,"qwen-talker-0.6b-base-Q4_K_M.gguf"))
             val loadedMs=android.os.SystemClock.elapsedRealtime()-loadStart
-            val embedding=File(app.cacheDir,"qwen-benchmark-speaker.bin")
+            val embedding=File(app.cacheDir,"qwen-benchmark-speaker.json")
             val prepareStart=android.os.SystemClock.elapsedRealtime()
             assertTrue(engine.lastError(),engine.extractSpeakerEmbedding(reference.absolutePath,embedding.absolutePath))
             val preparedMs=android.os.SystemClock.elapsedRealtime()-prepareStart

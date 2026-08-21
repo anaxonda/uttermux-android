@@ -48,7 +48,7 @@ class PocketProfileStore(
         return VoiceProfile(id,name,Languages.normalized(language).ifBlank{"en-US"},engineId,profileModelVersion,file.absolutePath,System.currentTimeMillis()).also{save(profiles()+it)}
     }
     fun rename(id:String,name:String):Boolean {val trimmed=name.trim();if(trimmed.isBlank())return false;val items=profiles();if(items.none{it.id==id})return false;save(items.map{if(it.id==id)it.copy(name=trimmed)else it});return true}
-    fun artifactPath(profile:VoiceProfile,kind:String):File=File(root,"${profile.id}-$kind.bin")
+    fun artifactPath(profile:VoiceProfile,kind:String,extension:String="bin"):File=File(root,"${profile.id}-$kind.$extension")
     fun setPreparedArtifacts(id:String,speakerEmbedding:File?=null,iclPrompt:File?=null,referenceText:String=""):VoiceProfile {
         val items=profiles();val current=items.firstOrNull{it.id==id}?:error("Voice profile no longer exists")
         val updated=current.copy(speakerEmbeddingFile=speakerEmbedding?.absolutePath?:current.speakerEmbeddingFile,
