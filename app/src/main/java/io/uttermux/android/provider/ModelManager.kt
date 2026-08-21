@@ -74,7 +74,7 @@ class ModelManager(private val context: Context) {
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_step.onnx","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_step.onnx","9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"),
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_shared.data","e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"),
         )),
-    ).filterNot { it.engine == "moss" }.forEach(::register) }
+    ).filterNot { it.id == "moss-tts-nano-100m-onnx-int8" }.forEach(::register) }
     val root = File(context.filesDir,"models").apply { mkdirs() }
     fun register(model:LocalModel) { synchronized(modelsById) { modelsById[model.id] = model } }
     fun model(id:String)=synchronized(modelsById) { modelsById[id] ?: error("Unknown model $id") }

@@ -4,11 +4,12 @@
 
 [![Android CI](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml/badge.svg)](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml)
 
-Linux desktop and Speech Dispatcher backend: [`anaxonda/uttermux-linux`](https://github.com/anaxonda/uttermux-linux)
-
 UtterMux is an Android system text-to-speech engine and voice manager. It gives
 Android readers one interface for local ONNX models and online providers, and
 also implements the loopback protocol used by KOReader's `TTS.koplugin`.
+
+The companion [Linux broker and Speech Dispatcher backend](https://github.com/anaxonda/uttermux-linux)
+uses the same catalog contract and routing concepts.
 
 > **Status:** beta. No model weights are bundled. Local artifacts are downloaded
 > only after the user selects Download.
@@ -88,7 +89,7 @@ means a reference recording must be configured before a system voice exists.
 | Pocket | Yes; presets and profiles | Yes; presets and profiles | Reference-conditioned cloning |
 | Kokoro | v1.0 and v1.1 FP32 | v1.0 FP32 | INT8 and FP8 are not included |
 | ZipVoice Distill | No | Profile; INT8 | Linux requires reference audio and transcript |
-| MOSS-TTS-Nano | No | Companion adapter; FP32 | Android evaluation failed sustained-reader acceptance |
+| MOSS-TTS-Nano | FP32; explicit heavy/experimental download | Companion adapter; FP32 | Runnable on Android; not suitable for the 2019 reference phone |
 | Qwen3-TTS 0.6B | Base Q4_K_M device preview; profiles | Companion adapter; CustomVoice | Separate runtimes sharing catalog metadata |
 
 | Concrete artifact | Languages / voices | Clone | Download | Precision | Est. RAM | 2019 SM-G970F result | Upstream |
@@ -103,6 +104,7 @@ means a reference recording must be configured before a system voice exists.
 | `sherpa-onnx-pocket-tts-int8-2026-01-26` | English; 10 references + profiles | Yes | 176 MiB | INT8 | 420 MiB | Two-step sustained warm RTF ~0.47–0.48; client boundaries may remain audible | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
 | `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | Same heavy family as measured v1.1; not accepted for continuous reading on the reference phone | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
 | `kokoro-multi-lang-v1_1` | English/Chinese; 103 speakers | No | 348 MiB | FP32 | 700 MiB | Runnable; same heavy tier, not separately timed | [Kokoro v1.1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html) |
+| `moss-tts-nano-100m-onnx` | 20 languages; 18 presets | No | 728 MiB | FP32 | ~1.4 GiB | Runnable but RTF ~1.41–1.47; exposed only for substantially faster devices | [MOSS-TTS-Nano](https://github.com/OpenMOSS/MOSS-TTS-Nano) |
 | `qwen3-tts-0.6b-base-q4km` | 10 languages; user profiles | Yes | 843 MiB | Q4_K_M GGUF | ~1.54 GiB measured PSS | Device preview only: a bounded 128-token clone run produced no first audio after 4 min 19 s on the reference phone | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) / [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) |
 
 Kokoro v1.1 INT8 exists upstream but is not included because the tested
@@ -123,7 +125,6 @@ memory, sustained RTF, and multi-client reader tests.
 
 | Model | Main value | Available deployment path | Evaluation hardware | UtterMux status |
 | --- | --- | --- | --- | --- |
-| [MOSS-TTS-Nano](https://github.com/OpenMOSS/MOSS-TTS-Nano) | 20-language cloning/streaming | Official ONNX Runtime Android example | SM-G970F measured | Rejected: sustained RTF ~1.41–1.47 and audible reader pauses |
 | [ZipVoice Distill](https://github.com/k2-fsa/ZipVoice) | English/Chinese zero-shot cloning | sherpa-onnx Android | recent midrange or faster | Not integrated; system voice requires reference audio and exact transcript |
 | [Chatterbox Nano](https://huggingface.co/ResembleAI/chatterbox-nano) | English cloning | PyTorch upstream; community ONNX work | current flagship | No accepted maintained arm64 runtime |
 | [NeuTTS Nano](https://github.com/neuphonic/neutts) | multilingual per-model cloning | GGUF backbone + ONNX codec | current flagship | Custom runtime and reader acceptance tests required |
@@ -236,10 +237,11 @@ uses at most two threads for Pocket and four for other local engines, bounded by
 device's available cores. Two Pocket steps are the fresh quality default; the benchmark
 figures below describe the reference phone rather than a universal optimum. Kokoro uses the supported FP32 graph: the available
 INT8 export is intentionally hidden because current ARM reports include rail-pinned
-audio, tones, and performance regressions. MOSS and ZipVoice are intentionally
-excluded from this release. MOSS did not meet sustained document-reading latency;
-ZipVoice requires a reference recording plus transcript and has no preset-voice
-catalog suitable for the current system-TTS UX.
+audio, tones, and performance regressions. The official MOSS FP32 graph remains
+available as an explicit heavy/experimental download for faster hardware; it is
+never selected as an automatic fallback. ZipVoice remains excluded because it
+requires a reference recording plus transcript and has no preset-voice catalog
+suitable for the current system-TTS UX.
 
 Qwen Base Q4_K_M is visible as a **device preview**: its pinned arm64 runtime,
 download, cancellation, streaming callback, and profile path are implemented,
@@ -340,7 +342,7 @@ are local engineering measurements, not upstream claims.
 | Inflect Nano v2 FP32 | repeated tuned RTF 0.176–0.250; 2.16–3.08 s median first PCM | 227–338 MB peak PSS | One thread selected; comfortably faster than realtime |
 | Pocket INT8, 2 steps | RTF 0.569/0.584/1.021/1.152 at 1/2/3/4 threads | 642 MB peak PSS | One thread selected; wider phone parallelism regresses sharply |
 | Kokoro v1.0 FP32 | RTF 1.239/1.116/1.107/1.320 at 1/2/3/4 threads | 923 MB peak PSS | Two threads selected within the 5% band; still marginal for continuous reading |
-| MOSS INT8 | sustained RTF ~1.41–1.47 | test artifact removed | Rejected for this release |
+| MOSS INT8 evaluation | sustained RTF ~1.41–1.47 | conversion removed | Not exposed; official FP32 remains an explicit heavy download |
 
 Measurements use short fixed passages after a clean install and again with a
 warm engine. Sustained reader acceptance also requires repeated section

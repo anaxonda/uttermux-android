@@ -30,7 +30,7 @@ android {
     }
     buildFeatures { compose = true; buildConfig = true }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
-    packaging { jniLibs.useLegacyPackaging = true }
+    packaging { jniLibs.useLegacyPackaging = true; jniLibs.pickFirsts += "**/libonnxruntime.so" }
     testBuildType = "isolatedHost"
     buildTypes {
         create("isolatedHost") {
@@ -67,6 +67,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.3.2")
     implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("androidx.work:work-runtime:2.11.2")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

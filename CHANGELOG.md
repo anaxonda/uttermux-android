@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Restored the official MOSS-TTS-Nano FP32 ONNX runtime as an explicit
+  heavy/experimental download for faster arm64 devices; no weights are bundled
+  and it is never selected automatically.
 - Replaced value popups with per-dimension searchable filter screens, compact
   active-filter chips, dependent result counts, and persistent filter state.
 - Added a provenance-locked shared catalog plus a daily validated catalog-sync
