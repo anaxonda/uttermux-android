@@ -1,5 +1,7 @@
 # UtterMux for Android
 
+<img src="docs/assets/uttermux.svg" width="112" alt="UtterMux jellyfish waveform logo">
+
 [![Android CI](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml/badge.svg)](https://github.com/anaxonda/uttermux-android/actions/workflows/android.yml)
 
 UtterMux is an Android system text-to-speech engine and voice manager. It gives
