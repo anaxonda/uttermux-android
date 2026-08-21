@@ -6,6 +6,13 @@ UtterMux is an Android system text-to-speech engine and voice manager. It gives
 Android readers one interface for local ONNX models and online providers, and
 also implements the loopback protocol used by KOReader's `TTS.koplugin`.
 
+> **Status:** beta. No model weights are bundled. Local artifacts are downloaded
+> only after the user selects Install.
+
+| Voices and filters | Voice creation | Settings and providers |
+| --- | --- | --- |
+| <img src="docs/screenshots/android-voices.png" width="280" alt="UtterMux voice filters and active voice"> | <img src="docs/screenshots/android-create.png" width="280" alt="UtterMux Pocket voice creation"> | <img src="docs/screenshots/android-settings.png" width="280" alt="UtterMux settings and provider list"> |
+
 ## What works
 
 - Android `TextToSpeechService` integration for Feeder, Librera, KOReader, and
@@ -48,25 +55,29 @@ excluded from backup and device transfer.
 Filters and list position survive tab changes and rotation but intentionally
 start clean after a complete process relaunch.
 
-## Supported local models
+## Runnable local catalog
 
 No model is bundled. Sizes and RAM are approximate and can change when upstream
 artifacts change; the catalog is the download source of truth.
 
-| Library / variant | Languages / voices | Clone | Download | Quantization | Approx. RAM | SM-G970F assessment | Upstream |
+| Concrete artifact | Languages / voices | Clone | Download | Precision | Est. RAM | 2019 SM-G970F result | Upstream |
 | --- | --- | ---: | ---: | --- | ---: | --- | --- |
-| Piper / VITS | 174 packages, 2,707 speaker choices, 50+ languages | No | varies | ONNX | varies | **Recommended**; best continuity baseline | [Piper](https://github.com/rhasspy/piper) |
-| Inflect Nano v2 | English, fixed voice | No | ~17 MB | FP32 | ~80 MB | Likely excellent; not separately benchmarked | [Inflect Nano](https://huggingface.co/owensong/Inflect-Nano-v2) |
-| Inflect Micro v2 | English, fixed voice | No | ~43 MB | FP32 | ~120 MB | Likely excellent; not separately benchmarked | [Inflect Micro](https://huggingface.co/owensong/Inflect-Micro-v2) |
-| Matcha LJSpeech | English, one voice | No | ~77 MB | FP32 | ~260 MB | Expected usable; sustained test pending | [sherpa-onnx TTS](https://github.com/k2-fsa/sherpa-onnx) |
-| Kitten Nano 0.8 | English, eight voices | No | ~31 MB | INT8 | ~120 MB | **Recommended**; measured faster than realtime | [KittenTTS](https://github.com/KittenML/KittenTTS) |
-| Kokoro 1.0 / 1.1 | multilingual, 53 / 103 speakers | No | ~348–350 MB | FP32 | ~650–700 MB | Works, but too slow for seamless reading | [sherpa-onnx Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/) |
-| Pocket TTS | English, ten references plus private profiles | **Yes** | ~176 MB | INT8 | ~420 MB | Usable with reader-dependent section gaps | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
-| Supertonic 3 | 31 languages, ten styles | No | ~129 MB | INT8 | ~350 MB | Expected usable; sustained test pending | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) |
+| Piper/VITS dynamic index | 174 packages; 2,707 choices; 50+ languages | No | package-specific | FP32/INT8 by package | package-specific | Tested; Alan Low is the continuity baseline | [Piper](https://github.com/OHF-Voice/piper1-gpl) |
+| `vits-inflect-en-nano-v2` | English; 1 | No | 17 MiB | FP32 | 80 MiB | Runnable; no isolated timing recorded | [Inflect Nano](https://huggingface.co/owensong/Inflect-Nano-v2) |
+| `vits-inflect-en-micro-v2` | English; 1 | No | 43 MiB | FP32 | 120 MiB | Runnable; no isolated timing recorded | [Inflect Micro](https://huggingface.co/owensong/Inflect-Micro-v2) |
+| `kitten-nano-en-v0_1-fp16` | English; 1 | No | 26 MiB | FP16 | 120 MiB | Runnable; no isolated timing recorded | [KittenTTS](https://github.com/KittenML/KittenTTS) |
+| `kitten-nano-en-v0_8-int8` | English; 8 | No | 31 MiB | INT8 | 120 MiB | RTF ~0.80 | [KittenTTS](https://github.com/KittenML/KittenTTS) |
+| `matcha-icefall-en_US-ljspeech` | English; 1 | No | 77 MiB | FP32 | 260 MiB | Runnable; sustained reader test pending | [Matcha-TTS](https://github.com/shivammehta25/Matcha-TTS) |
+| `sherpa-onnx-supertonic-3-tts-int8-2026-05-11` | 31 languages; 10 styles | No | 129 MiB | INT8 | 350 MiB | Runnable; sustained reader test pending | [Supertonic](https://github.com/supertone-inc/supertonic) |
+| `sherpa-onnx-pocket-tts-int8-2026-01-26` | English; 10 references + profiles | Yes | 176 MiB | INT8 | 420 MiB | Warm first PCM ~243–262 ms; client boundaries audible | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
+| `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | RTF ~1.91; not continuous-reader speed | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
+| `kokoro-multi-lang-v1_1` | English/Chinese; 103 speakers | No | 348 MiB | FP32 | 700 MiB | Runnable; same heavy tier, not separately timed | [Kokoro v1.1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html) |
 
-Kokoro INT8 is not exposed because the current Android/ARM export has produced
+Kokoro v1.1 INT8 exists upstream but is not exposed because the tested
+Android/ARM path produced
 intermittent rail-pinned audio and regressions; the FP32 graph is the supported
-variant. A model is not promoted merely because its runtime can initialize.
+variant. FP8 is not supported by this CPU runtime. A model is not promoted
+merely because its runtime can initialize.
 
 ## Candidate and rejected local models
 
@@ -74,17 +85,17 @@ These entries are documentation, not dead rows in the app. “Candidate” means
 arm64 implementation still has to pass exact system-TTS ranges, cancellation,
 memory, sustained RTF, and multi-client reader tests.
 
-| Model | Main value | Runtime position | Likely phone tier | Current decision |
+| Model | Main value | Available deployment path | Evaluation hardware | UtterMux status |
 | --- | --- | --- | --- | --- |
-| MOSS-TTS-Nano | multilingual cloning/streaming | Official ONNX path exists | mid/high | **Rejected for now:** measured sustained latency and pauses were not usable |
-| ZipVoice Distill | English/Chinese zero-shot cloning | Supported by sherpa-onnx | mid/high | Candidate; requires reference audio and transcript, with no suitable preset catalog yet |
-| Chatterbox Nano | English cloning | Mobile ONNX path is not yet accepted here | high | Candidate after a maintained arm64 runtime |
-| NeuTTS Nano | multilingual per-model cloning | GGUF backbone plus ONNX codec | high | Candidate; custom runtime and sustained tests required |
-| Qwen3-TTS 0.6B | built-in voices or cloning | Local Android ports exist outside UtterMux | 6–8 GB preferred | Deferred; large runtime and memory acceptance work |
-| Audio8 0.6B INT4 | multilingual cloning and streaming | Official ONNX package, Android unproven here | high | Candidate after ARM benchmarks |
-| LEMAS-TTS | multilingual cloning | weak mobile ecosystem | high | Research only |
-| X-Voice | cross-lingual cloning | PyTorch-oriented and noncommercial checkpoint | high | Not distributable as a normal app model |
-| OmniVoice | very broad language ambition | no accepted Android deployment | high | Research only |
+| [MOSS-TTS-Nano](https://github.com/OpenMOSS/MOSS-TTS-Nano) | 20-language cloning/streaming | Official ONNX Runtime Android example | SM-G970F measured | Rejected: sustained RTF ~1.41–1.47 and audible reader pauses |
+| [ZipVoice Distill](https://github.com/k2-fsa/ZipVoice) | English/Chinese zero-shot cloning | sherpa-onnx Android | recent midrange or faster | Not integrated; system voice requires reference audio and exact transcript |
+| [Chatterbox Nano](https://huggingface.co/ResembleAI/chatterbox-nano) | English cloning | PyTorch upstream; community ONNX work | current flagship | No accepted maintained arm64 runtime |
+| [NeuTTS Nano](https://github.com/neuphonic/neutts) | multilingual per-model cloning | GGUF backbone + ONNX codec | current flagship | Custom runtime and reader acceptance tests required |
+| [Qwen3-TTS 0.6B](https://github.com/QwenLM/Qwen3-TTS) CustomVoice/Base | 9 built-in voices or zero-shot cloning | external Android GGUF ports | 6–8 GiB current flagship | Runtime integration, memory, and sustained reader tests required |
+| [Audio8 0.6B INT4](https://github.com/Audio8-AI/Audio8_TTS) | multilingual cloning/streaming | official CPU ONNX package | 6–8 GiB current flagship | Android ARM benchmark and service integration required |
+| [LEMAS-TTS](https://github.com/LEMAS-Project/LEMAS-TTS) | multilingual cloning | ONNX assets; limited mobile integration | current flagship | No accepted Android runtime |
+| [X-Voice](https://github.com/sunnyxrxrx/X-Voice) | cross-lingual cloning | PyTorch-oriented | current flagship | Checkpoint is CC-BY-NC-4.0; not a normal distributable app model |
+| [OmniVoice](https://github.com/k2-fsa/OmniVoice) | 600+ language zero-shot synthesis | no accepted Android deployment | unassigned | No accepted Android runtime |
 
 ## Online services
 
@@ -148,7 +159,7 @@ waits for a complete passage before hearing audio.
 ## Model policy
 
 Only runnable voices appear in the voice catalog; research and compatibility
-notes are documentation, not dead UI rows. Local models are optional downloads.
+notes are documentation, not dead UI rows. Local model downloads are explicit.
 Pocket reuses one runtime/model with cached reference WAV files. Its 3/4/5-step
 quality selector trades generation latency for refinement; three steps is the
 measured low-latency default. Kokoro uses the supported FP32 graph: the available
@@ -191,10 +202,11 @@ Samsung SM-G970F, Alan Low produced first audio in about 2.1 seconds cold and
 
 ### Galaxy S10 development benchmark
 
-The development phone is an SM-G970F (Exynos 9820, Android 12, about 5.5 GB
-usable RAM). RTF is generation time divided by generated audio duration; below
-1.0 is faster than realtime. These are engineering measurements, not upstream
-claims.
+The reference phone is a 2019 Samsung Galaxy S10 SM-G970F (Exynos 9820,
+Android 12, about 5.5 GiB usable RAM). It is a low-spec acceptance target by
+2026 standards, not a representative current flagship. RTF is generation time
+divided by generated audio duration; below 1.0 is faster than realtime. These
+are local engineering measurements, not upstream claims.
 
 | Model | Measurement | Storage / process observation | Reader conclusion |
 | --- | --- | --- | --- |
@@ -220,6 +232,48 @@ A KOReader regression test now plays the same Pocket section twice
 and waits for AudioTrack's actual playback head, covering stale-stream reuse and
 clipped section tails. These tests are excluded from the ordinary suite because
 they consume substantial bandwidth, storage, and time.
+
+Run the argument-driven benchmark against any installed voice:
+
+```sh
+adb shell am instrument -w \
+  -e class io.uttermux.android.ModelBenchmarkTest#benchmarkInstalledVoice \
+  -e voice sherpa/sherpa-onnx-pocket-tts-int8-2026-01-26/alba-casual@en-US \
+  -e runs 3 \
+  io.uttermux.android.test/androidx.test.runner.AndroidJUnitRunner
+adb logcat -d -s UtterMuxBenchmark:I
+```
+
+The JSON log reports device/SoC, voice ID, model, wall time, generated duration,
+RTF, and process PSS for every run. It excludes playback. Run 1 includes model
+loading only if the test process did not already cache that model. It does not
+control thermal state, CPU governor, charging state, or background load.
+
+### Newer-phone model scope
+
+Kokoro FP32 is already functionally compatible with the reference phone; its
+measured RTF is the blocker. A recent high-performance ARM phone may make it a
+continuous-reading choice, but UtterMux does not infer that from RAM or core
+count alone. Qwen3-TTS 0.6B, Audio8 0.6B INT4, ZipVoice, and other heavyweight
+families require a maintained arm64 runtime plus measured cold/warm latency,
+sustained RTF, peak PSS, cancellation, and multi-client tests before they can
+enter the runnable catalog. A hardware label will remain advisory and will not
+download or hide models.
+
+## Related work
+
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) provides the common JNI
+  runtime and local model exports.
+- [HayaiTTS](https://github.com/HayaiApp/HayaiTTS) is a similar offline Android
+  system engine with a broad sherpa-onnx catalog and per-speaker samples.
+- [NekoSpeak](https://github.com/siva-sub/NekoSpeak) informed the adaptive
+  producer/consumer PCM pipeline and underrun handling.
+- [Read Aloud](https://github.com/ken107/read-aloud) informed cloud-provider
+  discovery, authentication, and proxy tradeoffs.
+- [KOReader](https://github.com/koreader/koreader) is supported both through
+  Android system TTS and the loopback compatibility protocol.
+- [qwen3-tts-android](https://github.com/Danmoreng/qwen3-tts-android) is a
+  reference for local quantized Qwen deployment; UtterMux does not embed it.
 
 The project is GPL-3.0-or-later. The pinned sherpa-onnx JNI wrapper and native
 libraries are Apache-2.0 components from k2-fsa; individual voice/model licenses
