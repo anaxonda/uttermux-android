@@ -24,7 +24,7 @@ jobs:
       - name: Verify native provenance
         run: ./native/verify-provenance.sh
       - name: Unit tests and lint
-        run: ./gradlew testDebugUnitTest lintDebug
+        run: ./gradlew testIsolatedHostUnitTest lintDebug
       - name: Build APK
         run: ./gradlew assembleDebug
       - name: Audit APK payload

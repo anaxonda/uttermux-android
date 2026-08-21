@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 class EdgeProviderIntegrationTest {
+    @OptInDeviceTest
     @Test fun edgeCatalogAndSynthesisReturnPlayablePcm(){
         val provider=EdgeProvider(ApplicationProvider.getApplicationContext<Context>())
         provider.refresh();assertTrue(provider.voices.size>100)

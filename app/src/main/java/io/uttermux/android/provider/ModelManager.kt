@@ -7,6 +7,7 @@ import java.io.*
 import java.net.URL
 import java.net.HttpURLConnection
 import java.security.MessageDigest
+import android.os.StatFs
 
 data class RemoteAsset(val file:String,val url:String,val sha256:String)
 data class LocalModel(val id:String,val engine:String,val url:String,val sha256:String,val model:String,val tokens:String="tokens.txt",val voices:String="",val dataDir:String="espeak-ng-data",val lexicon:String="",
@@ -77,6 +78,7 @@ class ModelManager(private val context: Context) {
     val root = File(context.filesDir,"models").apply { mkdirs() }
     fun register(model:LocalModel) { synchronized(modelsById) { modelsById[model.id] = model } }
     fun model(id:String)=synchronized(modelsById) { modelsById[id] ?: error("Unknown model $id") }
+    fun artifactFingerprint(id:String):String {val model=synchronized(modelsById){modelsById[id]};val material=((model?.let{listOf(it.sha256,it.secondarySha256)+it.assets.map{asset->asset.sha256}}?:listOf(id))+io.uttermux.android.BuildConfig.VERSION_NAME).filter(String::isNotBlank).joinToString(":");return MessageDigest.getInstance("SHA-256").digest(material.toByteArray()).joinToString(""){"%02x".format(it)}}
     fun installed(id:String)=File(root,id).resolve(model(id).model).isFile
     fun needsRepair(id:String):Boolean {val model=model(id);return installed(id)&&model.assets.any{!File(File(root,id),it.file).isFile}}
     fun repair(id:String,progress:(String)->Unit={},cancelled:()->Boolean={false}){
@@ -93,6 +95,8 @@ class ModelManager(private val context: Context) {
     }
     fun install(id:String, progress:(String)->Unit={},cancelled:()->Boolean={false}) {
         val model=model(id); val partial=File(context.cacheDir,"$id.part")
+        val availableMb=StatFs(root.absolutePath).availableBytes/1_048_576L;val requiredMb=storageRequirementMb(model.downloadSizeMb)
+        require(availableMb>=requiredMb){"Not enough storage for ${model.title}: ${availableMb} MB free, ${requiredMb} MB safe headroom required"}
         val staging=File(root,".$id.staging").apply { if(model.url.isNotBlank())deleteRecursively();mkdirs() }
         if(model.url.isNotBlank()) {
             progress("Downloading $id");downloadVerified(model.url,partial,model.sha256,cancelled,"Model")
@@ -138,4 +142,5 @@ class ModelManager(private val context: Context) {
         file.inputStream().buffered().use{input->while(true){val count=input.read(buffer);if(count<0)break;digest.update(buffer,0,count)}}
         return digest.digest().joinToString(""){"%02x".format(it)}
     }
+    companion object {fun storageRequirementMb(downloadMb:Int)=1_024L+downloadMb.coerceAtLeast(1)*3L}
 }

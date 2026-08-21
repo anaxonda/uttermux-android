@@ -24,7 +24,7 @@ class PiperPreviewTest {
         assertTrue("Preview did not drain",finished.await(2,TimeUnit.SECONDS))
     }
 
-    @Test fun officialLessacSampleDecodesOnDevice() {
+    @OptInDeviceTest @Test fun officialLessacSampleDecodesOnDevice() {
         val url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/samples/speaker_0.mp3"
         val encoded = HttpAudio.get(url)
         val audio = CompressedAudioDecoder.mp3(ApplicationProvider.getApplicationContext(), encoded)
@@ -32,7 +32,7 @@ class PiperPreviewTest {
         assertTrue(audio.pcm16.size > audio.sampleRate * 2)
     }
 
-    @Test fun kokoroAndKittenCatalogSamplesDecodeOnDevice(){
+    @OptInDeviceTest @Test fun kokoroAndKittenCatalogSamplesDecodeOnDevice(){
         listOf(
             "https://github.com/HayaiApp/HayaiTTS-samples/releases/download/samples-3/kokoro-multi-lang-v1_0__sid0__en-US.mp3",
             "https://github.com/HayaiApp/HayaiTTS-samples/releases/download/samples-0/kitten-nano-en-v0_8-int8__sid0__en-US.mp3",

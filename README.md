@@ -143,15 +143,15 @@ memory, sustained RTF, and multi-client reader tests.
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 export ANDROID_HOME=$HOME/Android/Sdk
 unset ANDROID_SDK_ROOT
-./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
+./gradlew testIsolatedHostUnitTest assembleDebug assembleIsolatedHostAndroidTest lintDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Select UtterMux under Android's text-to-speech settings, then open UtterMux to
-install a local voice or configure a cloud provider. Do not use Gradle's generic
-`connectedDebugAndroidTest` task against a phone whose configured app data must
-be preserved; install the test APK and invoke selected instrumentation tests
-directly instead. The data-preserving wrapper performs that sequence:
+install a local voice or configure a cloud provider. Instrumentation targets
+the separate `io.uttermux.android.testhost` application and the runner refuses
+to execute against the live package. The wrapper installs that isolated host
+and invokes a selected deterministic test:
 
 ```sh
 scripts/device-test.sh
@@ -249,6 +249,29 @@ The custom endpoint is deliberately constrained to this PCM contract. The
 OpenAI-compatible provider separately supports a configurable base URL and
 model for APIs implementing OpenAI's speech endpoint.
 
+## Device tuning and model variants
+
+The **Tune** tab benchmarks installed local artifacts only. Each version and
+precision is independent: FP32, FP16, INT8, and GGUF artifacts never share
+results. The sweep records cold and warm first-audio latency, RTF, process
+memory, simulated underruns, and thermal state, then proposes the smallest
+thread count within 5% of the fastest result. Nothing is applied until the user
+confirms.
+
+Applied profiles are bound to a combined catalog-artifact and app-runtime
+fingerprint, and are ignored after either changes. Per-artifact tuning takes precedence over a global
+manual thread value, which takes precedence over Automatic. Pocket refinement
+and other quality controls are never changed by the benchmark.
+
+Variants from one family appear together with their version, quantization,
+storage, memory, and last result. Preview each installed variant with identical
+text before choosing a default: performance metrics cannot detect pronunciation
+errors or degraded voice quality. Benchmarking does not download models.
+
+Model installation needs room for the archive, extracted files, and Android's
+working reserve. On the development Galaxy S10, 2.5 GiB free is treated as low
+storage; clear at least 5 GiB, preferably 8–10 GiB, before multi-model testing.
+
 ## Verification
 
 The release test suite covers exact segmentation/ranges, PCM conversion and
@@ -256,6 +279,12 @@ silence trimming, adaptive buffering policy, routing, model management, text
 normalization, unsafe-output rejection, and system-TTS compatibility. On the development
 Samsung SM-G970F, Alan Low produced first audio in about 2.1 seconds cold and
 0.33 seconds warm while completing through Android's system TTS callback.
+
+Instrumentation uses the separate `io.uttermux.android.testhost` application.
+Its runner refuses to target the live package, and deterministic callback tests
+use test-host-only generated PCM. Network and large-model tests require an
+explicit opt-in annotation, so the ordinary connected suite neither downloads
+models nor depends on provider availability.
 
 ### Galaxy S10 development benchmark
 

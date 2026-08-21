@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /** Opt-in, argument-driven device benchmark. It never downloads a model. */
 @RunWith(AndroidJUnit4::class)
+@OptInDeviceTest
 class ModelBenchmarkTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val app get() = instrumentation.targetContext.applicationContext as UtterMuxApp

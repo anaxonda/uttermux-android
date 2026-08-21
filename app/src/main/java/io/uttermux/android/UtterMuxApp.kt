@@ -21,7 +21,7 @@ class UtterMuxApp : Application() {
         super.onCreate(); instance = this
         secure = SecureStore(this); settings = AppSettings(this)
         models=ModelManager(this);adaptiveBuffers=AdaptiveBufferRegistry(settings)
-        providers=listOf(
+        providers=(if(packageName.endsWith(".testhost"))listOf(TestHostProvider())else emptyList())+listOf(
             GrokProvider(secure),ElevenLabsProvider(secure),EdgeProvider(this),SherpaProvider(this,models),QwenLocalProvider(this,models),
             AzureProvider(secure),OpenAiProvider(secure),DeepgramProvider(secure),CartesiaProvider(secure),
             PlayHtProvider(this,secure),ResembleProvider(this,secure),

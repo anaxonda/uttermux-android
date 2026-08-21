@@ -46,7 +46,7 @@ class MainActivity:ComponentActivity(){
     }
 }
 
-private enum class Page(val label:String){VOICES("Voices"),CREATE("Create"),SETTINGS("Settings")}
+private enum class Page(val label:String){VOICES("Voices"),CREATE("Create"),TUNE("Tune"),SETTINGS("Settings")}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun UtterMuxManager(theme:String,onTheme:(String)->Unit){
@@ -57,10 +57,12 @@ private enum class Page(val label:String){VOICES("Voices"),CREATE("Create"),SETT
     Scaffold(topBar={TopAppBar(title={Column{Text("UtterMux");Text(status,style=MaterialTheme.typography.labelSmall)}})},bottomBar={NavigationBar{
         NavigationBarItem(selected=page==Page.VOICES,onClick={page=Page.VOICES},icon={Text("◉")},label={Text("Voices")})
         NavigationBarItem(selected=page==Page.CREATE,onClick={page=Page.CREATE},icon={Text("＋")},label={Text("Create")})
+        NavigationBarItem(selected=page==Page.TUNE,onClick={page=Page.TUNE},icon={Text("⌁")},label={Text("Tune")})
         NavigationBarItem(selected=page==Page.SETTINGS,onClick={page=Page.SETTINGS},icon={Text("⚙")},label={Text("Settings")})
     }}){padding->Box(Modifier.padding(padding)){when(page){
         Page.VOICES->VoicesPage(revision,voiceCatalog,filters,voiceListState,{revision++},{status=it})
         Page.CREATE->CreateVoicePage(revision,{revision++},{status=it})
+        Page.TUNE->BenchmarkPage{status=it}
         Page.SETTINGS->ModernSettingsPage(revision,theme,onTheme,{refresh()},{revision++},{status=it})
     }}}
 }

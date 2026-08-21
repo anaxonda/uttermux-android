@@ -19,7 +19,7 @@ class QwenLocalRuntime(private val context:Context,private val manager:ModelMana
 
     override fun supports(voice:VoiceRecord)=voice.provider==ProviderIds.QWEN_LOCAL
     private fun loaded():QwenEngine=synchronized(lock){engine?:QwenEngine().also{created->
-        val threads=settings.engineThreads.takeIf{it>0}?:Runtime.getRuntime().availableProcessors().coerceIn(1,4)
+        val threads=settings.tunedThreads(QWEN_MODEL,manager.artifactFingerprint(QWEN_MODEL)).takeIf{it>0}?:settings.engineThreads.takeIf{it>0}?:Runtime.getRuntime().availableProcessors().coerceIn(1,4)
         created.setCpuThreads(threads)
         val root=File(manager.root,QWEN_MODEL)
         check(created.loadModels(root.absolutePath,"qwen-talker-0.6b-base-Q4_K_M.gguf")){created.lastError() ?: "Qwen model load failed"}

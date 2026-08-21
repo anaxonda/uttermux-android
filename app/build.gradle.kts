@@ -11,7 +11,8 @@ android {
         targetSdk = 36
         versionCode = 4
         versionName = "0.4.0-beta.1"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "io.uttermux.android.SafeTestRunner"
+        testInstrumentationRunnerArguments["notAnnotation"] = "io.uttermux.android.OptInDeviceTest"
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild {
             cmake {
@@ -28,6 +29,15 @@ android {
     buildFeatures { compose = true; buildConfig = true }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
     packaging { jniLibs.useLegacyPackaging = true }
+    testBuildType = "isolatedHost"
+    buildTypes {
+        create("isolatedHost") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".testhost"
+            matchingFallbacks += listOf("debug")
+            isDebuggable = true
+        }
+    }
     if(!releaseKeystorePath.isNullOrBlank()){
         signingConfigs {
             create("release"){

@@ -28,7 +28,13 @@ class AppSettings(context: Context) {
         set(value){prefs.edit().putInt("pocket_num_steps_v3",value.coerceIn(1,5)).apply()}
     var engineThreads:Int
         get()=prefs.getInt("engine_threads",0)
-        set(value){prefs.edit().putInt("engine_threads",value.takeIf{it in setOf(1,2,4)}?:0).apply()}
+        set(value){prefs.edit().putInt("engine_threads",value.takeIf{it in 1..16}?:0).apply()}
+    fun tuningFingerprint(artifactId:String)=prefs.getString("tuning.$artifactId.fingerprint","").orEmpty()
+    fun tunedThreads(artifactId:String,fingerprint:String=""):Int=if(fingerprint.isNotBlank()&&tuningFingerprint(artifactId)!=fingerprint)0 else prefs.getInt("tuning.$artifactId.threads",0)
+    fun setTunedThreads(artifactId:String,value:Int,fingerprint:String=""){
+        val edit=prefs.edit();val key="tuning.$artifactId.threads";val fingerprintKey="tuning.$artifactId.fingerprint"
+        if(value in 1..16){edit.putInt(key,value);edit.putString(fingerprintKey,fingerprint)}else{edit.remove(key);edit.remove(fingerprintKey)};edit.apply()
+    }
     var paidPreviewConfirmed:Boolean
         get()=prefs.getBoolean("paid_preview_confirmed",false)
         set(value){prefs.edit().putBoolean("paid_preview_confirmed",value).apply()}

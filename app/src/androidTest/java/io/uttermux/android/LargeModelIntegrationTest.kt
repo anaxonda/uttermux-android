@@ -23,6 +23,7 @@ import java.io.File
 /** Explicit, opt-in device tests. These download hundreds of megabytes and are
  * intentionally not part of the ordinary connected test suite. */
 @RunWith(AndroidJUnit4::class)
+@OptInDeviceTest
 class LargeModelIntegrationTest {
     private val app get()=InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as UtterMuxApp
 
