@@ -25,8 +25,8 @@ class PocketProfileStore(
     private val prefs=context.getSharedPreferences(if(namespace=="pocket")"pocket_profiles" else "voice_profiles_$namespace",Context.MODE_PRIVATE)
     private val root=File(context.filesDir,"voice-profiles/$namespace").apply{mkdirs()}
     fun profiles():List<VoiceProfile>{val data=prefs.getString("profiles","[]")?:"[]";return runCatching{val a=JSONArray(data);(0 until a.length()).map{i->a.getJSONObject(i).let{o->VoiceProfile(
-        o.getString("id"),o.getString("name"),Languages.normalized(o.optString("language","en-US")),o.optString("engine",engineId),o.optString("modelVersion",profileModelVersion),o.optString("referenceFile",o.optString("file")),o.optLong("createdAt",0L),o.optBoolean("localOnly",true))}}}.getOrDefault(emptyList())}
-    private fun save(items:List<VoiceProfile>){prefs.edit().putString("profiles",JSONArray().also{a->items.forEach{p->a.put(JSONObject().put("schemaVersion",1).put("id",p.id).put("name",p.name).put("language",p.language).put("engine",p.engine).put("modelVersion",p.modelVersion).put("referenceFile",p.referenceFile).put("createdAt",p.createdAt).put("localOnly",p.localOnly))}}.toString()).apply()}
+        o.getString("id"),o.getString("name"),Languages.normalized(o.optString("language","en-US")),o.optString("engine",engineId),o.optString("modelVersion",profileModelVersion),o.optString("referenceFile",o.optString("file")),o.optLong("createdAt",0L),o.optBoolean("localOnly",true),o.optString("speakerEmbeddingFile"),o.optString("iclPromptFile"),o.optString("referenceText"))}}}.getOrDefault(emptyList())}
+    private fun save(items:List<VoiceProfile>){prefs.edit().putString("profiles",JSONArray().also{a->items.forEach{p->a.put(JSONObject().put("schemaVersion",2).put("id",p.id).put("name",p.name).put("language",p.language).put("engine",p.engine).put("modelVersion",p.modelVersion).put("referenceFile",p.referenceFile).put("createdAt",p.createdAt).put("localOnly",p.localOnly).put("speakerEmbeddingFile",p.speakerEmbeddingFile).put("iclPromptFile",p.iclPromptFile).put("referenceText",p.referenceText))}}.toString()).apply()}
     fun import(uri:Uri,name:String,language:String="en-US"):VoiceProfile {
         val bytes=requireNotNull(context.contentResolver.openInputStream(uri)){"Cannot open recording"}.use{it.readBytes()}
         val audio=CompressedAudioDecoder.decode(context,bytes,uri.lastPathSegment?.substringAfterLast('.',"audio")?:"audio")
@@ -48,8 +48,15 @@ class PocketProfileStore(
         return VoiceProfile(id,name,Languages.normalized(language).ifBlank{"en-US"},engineId,profileModelVersion,file.absolutePath,System.currentTimeMillis()).also{save(profiles()+it)}
     }
     fun rename(id:String,name:String):Boolean {val trimmed=name.trim();if(trimmed.isBlank())return false;val items=profiles();if(items.none{it.id==id})return false;save(items.map{if(it.id==id)it.copy(name=trimmed)else it});return true}
+    fun artifactPath(profile:VoiceProfile,kind:String):File=File(root,"${profile.id}-$kind.bin")
+    fun setPreparedArtifacts(id:String,speakerEmbedding:File?=null,iclPrompt:File?=null,referenceText:String=""):VoiceProfile {
+        val items=profiles();val current=items.firstOrNull{it.id==id}?:error("Voice profile no longer exists")
+        val updated=current.copy(speakerEmbeddingFile=speakerEmbedding?.absolutePath?:current.speakerEmbeddingFile,
+            iclPromptFile=iclPrompt?.absolutePath?:current.iclPromptFile,referenceText=referenceText.ifBlank{current.referenceText})
+        save(items.map{if(it.id==id)updated else it});return updated
+    }
     fun reference(profile:VoiceProfile):AudioData {val bytes=File(profile.referenceFile).readBytes();require(bytes.size>44){"Reference recording is empty"};return AudioData(24_000,bytes.copyOfRange(44,bytes.size))}
-    fun delete(id:String):Boolean {val items=profiles();val profile=items.firstOrNull{it.id==id}?:return false;File(profile.referenceFile).delete();save(items.filterNot{it.id==id});return true}
+    fun delete(id:String):Boolean {val items=profiles();val profile=items.firstOrNull{it.id==id}?:return false;listOf(profile.referenceFile,profile.speakerEmbeddingFile,profile.iclPromptFile).filter{it.isNotBlank()}.forEach{File(it).delete()};save(items.filterNot{it.id==id});return true}
     private fun writeWav(file:File,pcm:ByteArray,rate:Int)=FileOutputStream(file).use{out->
         fun le(value:Int,count:Int){repeat(count){out.write(value shr (8*it) and 0xff)}}
         out.write("RIFF".toByteArray());le(36+pcm.size,4);out.write("WAVEfmt ".toByteArray());le(16,4);le(1,2);le(1,2);le(rate,4);le(rate*2,4);le(2,2);le(16,2);out.write("data".toByteArray());le(pcm.size,4);out.write(pcm)

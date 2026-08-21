@@ -31,12 +31,18 @@ class QwenLocalRuntime(private val context:Context,private val manager:ModelMana
         require(manager.installed(QWEN_MODEL)){"Download Qwen3-TTS 0.6B Base first"}
         val began=System.nanoTime();var sequence=0
         val profileId=session.voice.id.substringAfter("/custom-","").substringBefore('@')
-        val reference=profiles.profiles().firstOrNull{it.id==profileId}?.referenceFile
+        var profile=profiles.profiles().firstOrNull{it.id==profileId}?:error("Qwen voice profile is missing")
+        var embedding=profile.speakerEmbeddingFile.takeIf{it.isNotBlank()&&File(it).isFile}
+        if(embedding==null){
+            val output=profiles.artifactPath(profile,"speaker-embedding")
+            check(loaded().extractSpeakerEmbedding(profile.referenceFile,output.absolutePath)){loaded().lastError()?:"Could not prepare Qwen speaker embedding"}
+            profile=profiles.setPreparedArtifacts(profile.id,speakerEmbedding=output);embedding=profile.speakerEmbeddingFile
+        }
         // Qwen emits audio tokens at 12 Hz. A loose two-token-per-character
         // ceiling leaves room for slow speech without permitting multi-minute
         // runaway generation from an ordinary system-TTS request.
         val tokenBudget=(text.length*2).coerceIn(48,512)
-        val result=loaded().stream(text,referenceWav=reference,params=QwenEngine.NativeParams(languageId=languageId(session.language),maxAudioTokens=tokenBudget),callback=QwenEngine.AudioChunkCallback{samples,rate,_,_,_,_,startByte,endByte,alignment,_ ->
+        val result=loaded().stream(text,speakerEmbedding=embedding,params=QwenEngine.NativeParams(languageId=languageId(session.language),maxAudioTokens=tokenBudget),callback=QwenEngine.AudioChunkCallback{samples,rate,_,_,_,_,startByte,endByte,alignment,_ ->
             if(cancelled.get())return@AudioChunkCallback false
             val pcm=ByteArray(samples.size*2);samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();pcm[i*2]=sample.toByte();pcm[i*2+1]=(sample shr 8).toByte()}
             val range=if(alignment>0&&startByte>=0&&endByte>startByte)TextRange(byteToUtf16(text,startByte),byteToUtf16(text,endByte)) else TextRange(0,text.length)

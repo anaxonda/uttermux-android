@@ -57,6 +57,9 @@ data class VoiceProfile(
     val referenceFile:String,
     val createdAt:Long,
     val localOnly:Boolean=true,
+    val speakerEmbeddingFile:String="",
+    val iclPromptFile:String="",
+    val referenceText:String="",
 )
 
 data class VoiceChoice(
