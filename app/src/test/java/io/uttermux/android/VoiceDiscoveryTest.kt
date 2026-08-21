@@ -7,6 +7,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VoiceDiscoveryTest {
+    @Test fun numeric_piper_speakers_are_searchable_but_not_discovery_suggestions(){
+        assertFalse(VoiceDiscovery.usefulVoiceSuggestion("00737 · Piper"))
+        assertFalse(VoiceDiscovery.usefulVoiceSuggestion("speaker-12 · Piper"))
+        assertTrue(VoiceDiscovery.usefulVoiceSuggestion("Alan Low · Piper"))
+        assertTrue(VoiceDiscovery.usefulVoiceSuggestion("Bella · Kokoro"))
+    }
     private fun voice(provider:String,model:String,language:String="en-US",network:Boolean=false,gender:String="female",performance:String="fast")=
         VoiceRecord("$provider/id@$language","Example",Locale.forLanguageTag(language),provider,model,setOf(language),network,gender=gender,performanceClass=performance)
 

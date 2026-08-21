@@ -17,12 +17,40 @@ import java.util.concurrent.TimeUnit
 import java.util.Locale
 import java.net.Socket
 import org.json.JSONObject
+import com.qwen.tts.studio.engine.QwenEngine
+import java.io.File
 
 /** Explicit, opt-in device tests. These download hundreds of megabytes and are
  * intentionally not part of the ordinary connected test suite. */
 @RunWith(AndroidJUnit4::class)
 class LargeModelIntegrationTest {
     private val app get()=InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as UtterMuxApp
+
+    @Test fun qwenDownloadAndDirectCloneBenchmark(){
+        val id="qwen3-tts-0.6b-base-q4km";install(id)
+        val modelRoot=File(app.models.root,id)
+        val reference=File(app.models.root,"sherpa-onnx-pocket-tts-int8-2026-01-26/presets/alba-casual.wav")
+        assertTrue("Pocket Alba reference is required for this controlled clone benchmark",reference.isFile)
+        QwenEngine().use{engine->
+            engine.setCpuThreads(4)
+            val loadStart=android.os.SystemClock.elapsedRealtime()
+            assertTrue(engine.lastError(),engine.loadModels(modelRoot.absolutePath,"qwen-talker-0.6b-base-Q4_K_M.gguf"))
+            val loadedMs=android.os.SystemClock.elapsedRealtime()-loadStart
+            repeat(2){run->
+                var frames=0L;var sampleRate=0;var firstMs=-1L
+                val began=android.os.SystemClock.elapsedRealtime()
+                val result=engine.stream("UtterMux measures Qwen synthesis speed on this Android device.",referenceWav=reference.absolutePath,
+                    params=QwenEngine.NativeParams(languageId=2050,maxAudioTokens=128)){samples,rate,_,_,_,_,_,_,_,_->
+                    if(firstMs<0)firstMs=android.os.SystemClock.elapsedRealtime()-began
+                    frames+=samples.size;sampleRate=rate;true
+                }
+                val wallMs=android.os.SystemClock.elapsedRealtime()-began
+                assertTrue(result.errorMsg,result.success);assertTrue(frames>0&&sampleRate>0)
+                val seconds=frames.toDouble()/sampleRate
+                Log.i("UtterMuxBenchmark","Qwen load=${loadedMs}ms run=${run+1} first=${firstMs}ms wall=${wallMs}ms audio=${"%.3f".format(seconds)}s rtf=${"%.3f".format(wallMs/1000.0/seconds)} pssKb=${android.os.Debug.getPss()}")
+            }
+        }
+    }
 
     @Test fun pocketDownloadAndExactVoiceSynthesis(){
         val id="sherpa-onnx-pocket-tts-int8-2026-01-26"

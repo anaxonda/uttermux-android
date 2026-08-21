@@ -93,7 +93,7 @@ means a reference recording must be configured before a system voice exists.
 | `sherpa-onnx-pocket-tts-int8-2026-01-26` | English; 10 references + profiles | Yes | 176 MiB | INT8 | 420 MiB | Warm first PCM ~243–262 ms; client boundaries audible | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
 | `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | RTF ~1.91; not continuous-reader speed | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
 | `kokoro-multi-lang-v1_1` | English/Chinese; 103 speakers | No | 348 MiB | FP32 | 700 MiB | Runnable; same heavy tier, not separately timed | [Kokoro v1.1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html) |
-| `qwen3-tts-0.6b-base-q4km` | 10 languages; user profiles | Yes | 843 MiB | Q4_K_M GGUF | 3 GiB | Device preview; sustained-reader benchmark required | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) / [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) |
+| `qwen3-tts-0.6b-base-q4km` | 10 languages; user profiles | Yes | 843 MiB | Q4_K_M GGUF | ~1.5 GiB measured PSS | Device preview only: a bounded 128-token clone run did not complete within three minutes on the reference phone | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) / [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) |
 
 Kokoro v1.1 INT8 exists upstream but is not included because the tested
 Android/ARM path produced intermittent rail-pinned audio and regressions.
@@ -210,6 +210,14 @@ download, cancellation, streaming callback, and profile path are implemented,
 but it is excluded from automatic fallback until sustained-reader benchmarks
 establish suitable hardware. Audio8, Chatterbox, NeuTTS, LEMAS, X-Voice, and
 OmniVoice remain documentation-only candidates.
+
+On the Galaxy S10 reference device, model download and verification took 67.9
+seconds. The process reached approximately 1.5 GiB PSS. A clone synthesis capped
+at 128 audio tokens (at most about 10.7 seconds of output at 12 Hz) was terminated
+after more than three minutes without producing its first streaming callback.
+This gives a lower-bound RTF well above 17 and also means callback-only
+cancellation cannot interrupt the expensive first generation window. Qwen is
+therefore unsuitable for system reading on this device.
 
 ## Cloud credentials and proxy contract
 

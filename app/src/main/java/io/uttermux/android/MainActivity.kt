@@ -87,7 +87,8 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
     val performances=entries.map{it.voice.performanceClass}.filter{it.isNotBlank()&&it!="unknown"}.distinct().sorted()
     val genders=entries.map{it.voice.gender.lowercase()}.filter(String::isNotBlank).distinct().sorted()
     val capabilities=entries.flatMap{it.voice.capabilities}.distinct().sorted()
-    val voices=entries.map{Suggestion(it.voice.name,it.voice.name)}.distinctBy{it.value}.sortedBy{it.label}
+    val voices=entries.asSequence().map{it.voice.name}.filter(VoiceDiscovery::usefulVoiceSuggestion)
+        .distinct().sortedWith(compareBy<String>({if("Piper" in it)1 else 0},{it.lowercase()})).map{Suggestion(it,it)}.toList()
     val accents=entries.map{it.voice.accent}.filter(String::isNotBlank).distinct().sorted().map{Suggestion(it,it)}
     return VoiceCatalogUi(entries,voices,languages,libraries,models,accents,performances,genders,capabilities,app.router.effectiveDefault())
 }
@@ -118,7 +119,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
             if(activity.fallbackReason.isNotBlank())Text(activity.fallbackReason,style=MaterialTheme.typography.labelSmall)
         }}}
         item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Find a voice",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(enabled=filtersActive,onClick=::clearFilters){Text("Clear filters")}}}
-        item{SuggestionSearchField("Voice, accent, or variant",filters.voiceSearch,snapshot.voices){filters.voiceSearch=it}}
+        item{SuggestionSearchField("Voice or keyword",filters.voiceSearch,snapshot.voices){filters.voiceSearch=it}}
         item{SuggestionSearchField("Language",filters.languageSearch,snapshot.languages){filters.languageSearch=it}}
         item{SuggestionSearchField("Voice library",filters.librarySearch,snapshot.libraries){filters.librarySearch=it;filters.modelSearch=""}}
         item{SuggestionSearchField("Model / version",filters.modelSearch,modelOptions){filters.modelSearch=it}}

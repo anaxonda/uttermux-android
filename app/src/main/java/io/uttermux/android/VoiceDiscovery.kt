@@ -32,6 +32,12 @@ data class VoiceFilters(
 )
 
 object VoiceDiscovery {
+    /** Numeric speaker IDs are valid searchable aliases in several Piper
+     * packages, but they are not useful zero-query discovery suggestions. */
+    fun usefulVoiceSuggestion(name:String):Boolean {
+        val speaker=name.substringBefore(" ·").trim()
+        return speaker.any(Char::isLetter) && !speaker.matches(Regex("(?i)speaker[- _]?\\d+"))
+    }
     fun cost(voice:VoiceRecord)=if(voice.costClass!="free")voice.costClass else if(voice.networkRequired&&voice.provider!=ProviderIds.EDGE)"metered" else "free"
     fun service(voice:VoiceRecord,providerName:String):String {
         if(voice.provider==ProviderIds.SHERPA){

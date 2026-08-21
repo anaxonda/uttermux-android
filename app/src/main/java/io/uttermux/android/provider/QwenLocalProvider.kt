@@ -32,7 +32,11 @@ class QwenLocalRuntime(private val context:Context,private val manager:ModelMana
         val began=System.nanoTime();var sequence=0
         val profileId=session.voice.id.substringAfter("/custom-","").substringBefore('@')
         val reference=profiles.profiles().firstOrNull{it.id==profileId}?.referenceFile
-        val result=loaded().stream(text,referenceWav=reference,params=QwenEngine.NativeParams(languageId=languageId(session.language),maxAudioTokens=(text.length*5).coerceIn(128,2048)),callback=QwenEngine.AudioChunkCallback{samples,rate,_,_,_,_,startByte,endByte,alignment,_ ->
+        // Qwen emits audio tokens at 12 Hz. A loose two-token-per-character
+        // ceiling leaves room for slow speech without permitting multi-minute
+        // runaway generation from an ordinary system-TTS request.
+        val tokenBudget=(text.length*2).coerceIn(48,512)
+        val result=loaded().stream(text,referenceWav=reference,params=QwenEngine.NativeParams(languageId=languageId(session.language),maxAudioTokens=tokenBudget),callback=QwenEngine.AudioChunkCallback{samples,rate,_,_,_,_,startByte,endByte,alignment,_ ->
             if(cancelled.get())return@AudioChunkCallback false
             val pcm=ByteArray(samples.size*2);samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();pcm[i*2]=sample.toByte();pcm[i*2+1]=(sample shr 8).toByte()}
             val range=if(alignment>0&&startByte>=0&&endByte>startByte)TextRange(byteToUtf16(text,startByte),byteToUtf16(text,endByte)) else TextRange(0,text.length)
