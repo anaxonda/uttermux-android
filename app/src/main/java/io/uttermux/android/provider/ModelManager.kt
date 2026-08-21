@@ -40,6 +40,11 @@ class ModelManager(private val context: Context) {
             RemoteAsset("presets/stuart-bell.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/voice-zero/stuart_bell.wav","00c7baeb2fb7a8c1c6198e045b5e853a7ccc04002a51a09b4be3dd7c96994f73"),
             RemoteAsset("presets/vera.wav","https://huggingface.co/kyutai/tts-voices/resolve/main/vctk/p229_023_enhanced.wav","309cf91a895830f15842b398f69a4962cb1f7e0bfab10e25dd27838e826c204b"),
         ),title="Pocket TTS INT8",family="Pocket",downloadSizeMb=176,estimatedRamMb=420,quantization="INT8",performanceClass="balanced",languages=setOf("en-US"),license="Apache-2.0; reference-specific voice terms",sourceUrl="https://github.com/kyutai-labs/pocket-tts"),
+        LocalModel("qwen3-tts-0.6b-base-q4km","qwen-gguf","","","qwen-talker-0.6b-base-Q4_K_M.gguf",assets=listOf(
+            RemoteAsset("qwen-talker-0.6b-base-Q4_K_M.gguf","https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/968442208ea86f312b6b67ac8ef0c1b551967e35/qwen-talker-0.6b-base-Q4_K_M.gguf","4b468ec7b1f62b90ef4ca316c0aa57deadfd54b2cf9651703ea753cedaf04226"),
+            RemoteAsset("qwen-tokenizer-12hz-Q4_K_M.gguf","https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/968442208ea86f312b6b67ac8ef0c1b551967e35/qwen-tokenizer-12hz-Q4_K_M.gguf","cf3788b4d50aaa665fb6e57c170396aae03a3555fea52d2b5d0cda902d658039"),
+        ),title="Qwen3-TTS 0.6B Base Q4_K_M",family="Qwen3-TTS",downloadSizeMb=843,estimatedRamMb=3000,quantization="Q4_K_M",performanceClass="heavy",
+            languages=setOf("en-US","zh-CN","ja-JP","ko-KR","de-DE","fr-FR","ru-RU","pt-BR","es-ES","it-IT"),license="Apache-2.0",sourceUrl="https://github.com/QwenLM/Qwen3-TTS"),
         LocalModel("moss-tts-nano-100m-onnx","moss","","","MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx",assets=listOf(
             RemoteAsset("MOSS-TTS-Nano-100M-ONNX/browser_poc_manifest.json","https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main/browser_poc_manifest.json","097d80e993dc29f0bae427590b4f77084a161cb578b50d82c29f455d5faa9eee"),
             RemoteAsset("MOSS-TTS-Nano-100M-ONNX/tts_browser_onnx_meta.json","https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main/tts_browser_onnx_meta.json","3edf25232dcd0af3d061c837e9a968a39e2f8592e06777d740503c4f2244f95c"),

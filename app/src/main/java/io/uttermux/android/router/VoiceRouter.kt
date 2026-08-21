@@ -30,7 +30,7 @@ class VoiceRouter(private val settings: AppSettings, providers: List<TtsProvider
         // Local voices are safe implicit fallbacks. Metered network providers must
         // be placed explicitly in the language route chain.
         fun fallbackRank(voice:VoiceRecord)=when(voice.performanceClass){"fast"->0;"unknown"->1;"balanced"->2;"cloud"->3;"heavy"->4;else->2}
-        availableVoices.filter { !it.networkRequired&&it.languages.any { tag -> Languages.matches(tag, language) } }
+        availableVoices.filter { !it.networkRequired&&"device-preview" !in it.capabilities&&it.languages.any { tag -> Languages.matches(tag, language) } }
             .sortedWith(compareBy(::fallbackRank,{it.name})).forEach { if (it !in result) result += it }
         return result.filter { providers[it.provider]?.isAvailable(it) == true }
     }

@@ -13,8 +13,20 @@ android {
         versionName = "0.4.0-beta.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
+        externalNativeBuild {
+            cmake {
+                targets += "qwen3_tts_jni"
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DQWEN3_ANDROID_OPENMP=OFF",
+                    "-DQWEN3_ANDROID_VULKAN=OFF",
+                    "-DQWEN3_ANDROID_OPENCL=OFF",
+                )
+            }
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
     packaging { jniLibs.useLegacyPackaging = true }
     if(!releaseKeystorePath.isNullOrBlank()){
         signingConfigs {
@@ -49,3 +61,17 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
+
+val validateGeneratedCatalog by tasks.registering {
+    val catalog=layout.projectDirectory.file("src/main/assets/catalog/v2/catalog.json")
+    inputs.file(catalog)
+    doLast {
+        val document=groovy.json.JsonSlurper().parse(catalog.asFile) as Map<*,*>
+        check(document["schemaVersion"]==2){"Unsupported generated catalog schema"}
+        val variants=document["variants"] as List<*>
+        check(variants.filterIsInstance<Map<*,*>>().any{it["id"]=="qwen3-tts-0.6b-base-q4km"&&it["status"]=="device-preview"}){
+            "Generated catalog is missing the Android Qwen device-preview variant"
+        }
+    }
+}
+tasks.named("preBuild").configure{dependsOn(validateGeneratedCatalog)}

@@ -46,8 +46,9 @@ excluded from backup and device transfer.
   filters local/cloud readiness and capability; installs, previews, and selects
   the default voice. Searchable pickers open their list on the first tap and the
   keyboard only on a second tap or the search icon.
-- **Create** records or imports a permitted reference sample for Pocket, lets
-  you preview both the source and generated voice, and manages private profiles.
+- **Create** records or imports a permitted reference sample for Pocket or the
+  Qwen device-preview runtime, previews source and generated audio, and manages
+  engine-specific private profiles.
 - **Settings** contains general integration, individually expandable online
   service cards, language routing, downloaded-model storage, explained advanced
   playback controls, diagnostics, and privacy/version information.
@@ -78,7 +79,7 @@ means a reference recording must be configured before a system voice exists.
 | Kokoro | v1.0 and v1.1 FP32 | v1.0 FP32 | INT8 and FP8 are not included |
 | ZipVoice Distill | No | Profile; INT8 | Linux requires reference audio and transcript |
 | MOSS-TTS-Nano | No | Companion adapter; FP32 | Android evaluation failed sustained-reader acceptance |
-| Qwen3-TTS 0.6B | No | Companion adapter; CustomVoice | Android runtime is not integrated |
+| Qwen3-TTS 0.6B | Base Q4_K_M device preview; profiles | Companion adapter; CustomVoice | Separate runtimes sharing catalog metadata |
 
 | Concrete artifact | Languages / voices | Clone | Download | Precision | Est. RAM | 2019 SM-G970F result | Upstream |
 | --- | --- | ---: | ---: | --- | ---: | --- | --- |
@@ -92,6 +93,7 @@ means a reference recording must be configured before a system voice exists.
 | `sherpa-onnx-pocket-tts-int8-2026-01-26` | English; 10 references + profiles | Yes | 176 MiB | INT8 | 420 MiB | Warm first PCM ~243–262 ms; client boundaries audible | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
 | `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | RTF ~1.91; not continuous-reader speed | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
 | `kokoro-multi-lang-v1_1` | English/Chinese; 103 speakers | No | 348 MiB | FP32 | 700 MiB | Runnable; same heavy tier, not separately timed | [Kokoro v1.1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html) |
+| `qwen3-tts-0.6b-base-q4km` | 10 languages; user profiles | Yes | 843 MiB | Q4_K_M GGUF | 3 GiB | Device preview; sustained-reader benchmark required | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) / [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) |
 
 Kokoro v1.1 INT8 exists upstream but is not included because the tested
 Android/ARM path produced intermittent rail-pinned audio and regressions.
@@ -115,7 +117,6 @@ memory, sustained RTF, and multi-client reader tests.
 | [ZipVoice Distill](https://github.com/k2-fsa/ZipVoice) | English/Chinese zero-shot cloning | sherpa-onnx Android | recent midrange or faster | Not integrated; system voice requires reference audio and exact transcript |
 | [Chatterbox Nano](https://huggingface.co/ResembleAI/chatterbox-nano) | English cloning | PyTorch upstream; community ONNX work | current flagship | No accepted maintained arm64 runtime |
 | [NeuTTS Nano](https://github.com/neuphonic/neutts) | multilingual per-model cloning | GGUF backbone + ONNX codec | current flagship | Custom runtime and reader acceptance tests required |
-| [Qwen3-TTS 0.6B](https://github.com/QwenLM/Qwen3-TTS) CustomVoice/Base | 9 built-in voices or zero-shot cloning | external Android GGUF ports | 6–8 GiB current flagship | Runtime integration, memory, and sustained reader tests required |
 | [Audio8 0.6B INT4](https://github.com/Audio8-AI/Audio8_TTS) | multilingual cloning/streaming | official CPU ONNX package | 6–8 GiB current flagship | Android ARM benchmark and service integration required |
 | [LEMAS-TTS](https://github.com/LEMAS-Project/LEMAS-TTS) | multilingual cloning | ONNX assets; limited mobile integration | current flagship | No accepted Android runtime |
 | [X-Voice](https://github.com/sunnyxrxrx/X-Voice) | cross-lingual cloning | PyTorch-oriented | current flagship | Checkpoint is CC-BY-NC-4.0; not a normal distributable app model |
@@ -156,6 +157,16 @@ UtterMux deliberately ships with **no voice or model in the APK**. The first-run
 catalog therefore has no ready offline voice until one is downloaded. This keeps
 the engine small and makes every model/license choice explicit.
 
+## Shared catalog
+
+The reviewed catalog source and deterministic generator live in
+[`uttermux-linux`](https://github.com/anaxonda/uttermux-linux/tree/main/catalog).
+This repository commits the generated schema-2 JSON used by Android builds.
+Families, runnable variants, voices, and artifacts are separate records, so
+Linux and Android can use different runtimes for one model family without
+presenting unsupported rows on either platform. The build validates the schema
+and requires the pinned Android Qwen device-preview variant.
+
 ## Adaptive streaming
 
 UtterMux prepares a route before starting, tells Android the fixed output format
@@ -194,9 +205,11 @@ excluded from this release. MOSS did not meet sustained document-reading latency
 ZipVoice requires a reference recording plus transcript and has no preset-voice
 catalog suitable for the current system-TTS UX.
 
-Qwen, Audio8, Chatterbox, NeuTTS, LEMAS, X-Voice, and OmniVoice are intentionally
-not advertised in the app until an arm64 runtime passes system-TTS, cancellation,
-memory, and sustained-speed acceptance tests.
+Qwen Base Q4_K_M is visible as a **device preview**: its pinned arm64 runtime,
+download, cancellation, streaming callback, and profile path are implemented,
+but it is excluded from automatic fallback until sustained-reader benchmarks
+establish suitable hardware. Audio8, Chatterbox, NeuTTS, LEMAS, X-Voice, and
+OmniVoice remain documentation-only candidates.
 
 ## Cloud credentials and proxy contract
 

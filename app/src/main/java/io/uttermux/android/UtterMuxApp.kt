@@ -22,7 +22,7 @@ class UtterMuxApp : Application() {
         secure = SecureStore(this); settings = AppSettings(this)
         models=ModelManager(this);adaptiveBuffers=AdaptiveBufferRegistry(settings)
         providers=listOf(
-            GrokProvider(secure),ElevenLabsProvider(secure),EdgeProvider(this),SherpaProvider(this,models),
+            GrokProvider(secure),ElevenLabsProvider(secure),EdgeProvider(this),SherpaProvider(this,models),QwenLocalProvider(this,models),
             AzureProvider(secure),OpenAiProvider(secure),DeepgramProvider(secure),CartesiaProvider(secure),
             PlayHtProvider(this,secure),ResembleProvider(this,secure),
             GoogleCloudProvider(this,secure),AwsPollyProvider(secure),

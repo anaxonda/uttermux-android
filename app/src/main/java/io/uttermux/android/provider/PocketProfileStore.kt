@@ -16,11 +16,16 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-class PocketProfileStore(private val context:Context) {
-    private val prefs=context.getSharedPreferences("pocket_profiles",Context.MODE_PRIVATE)
-    private val root=File(context.filesDir,"voice-profiles/pocket").apply{mkdirs()}
+class PocketProfileStore(
+    private val context:Context,
+    private val engineId:String="pocket",
+    private val profileModelVersion:String=MODEL_VERSION,
+    namespace:String=engineId,
+) {
+    private val prefs=context.getSharedPreferences(if(namespace=="pocket")"pocket_profiles" else "voice_profiles_$namespace",Context.MODE_PRIVATE)
+    private val root=File(context.filesDir,"voice-profiles/$namespace").apply{mkdirs()}
     fun profiles():List<VoiceProfile>{val data=prefs.getString("profiles","[]")?:"[]";return runCatching{val a=JSONArray(data);(0 until a.length()).map{i->a.getJSONObject(i).let{o->VoiceProfile(
-        o.getString("id"),o.getString("name"),Languages.normalized(o.optString("language","en-US")),o.optString("engine","pocket"),o.optString("modelVersion",MODEL_VERSION),o.optString("referenceFile",o.optString("file")),o.optLong("createdAt",0L),o.optBoolean("localOnly",true))}}}.getOrDefault(emptyList())}
+        o.getString("id"),o.getString("name"),Languages.normalized(o.optString("language","en-US")),o.optString("engine",engineId),o.optString("modelVersion",profileModelVersion),o.optString("referenceFile",o.optString("file")),o.optLong("createdAt",0L),o.optBoolean("localOnly",true))}}}.getOrDefault(emptyList())}
     private fun save(items:List<VoiceProfile>){prefs.edit().putString("profiles",JSONArray().also{a->items.forEach{p->a.put(JSONObject().put("schemaVersion",1).put("id",p.id).put("name",p.name).put("language",p.language).put("engine",p.engine).put("modelVersion",p.modelVersion).put("referenceFile",p.referenceFile).put("createdAt",p.createdAt).put("localOnly",p.localOnly))}}.toString()).apply()}
     fun import(uri:Uri,name:String,language:String="en-US"):VoiceProfile {
         val bytes=requireNotNull(context.contentResolver.openInputStream(uri)){"Cannot open recording"}.use{it.readBytes()}
@@ -40,7 +45,7 @@ class PocketProfileStore(private val context:Context) {
         val name=rawName.trim().ifBlank{"My Pocket voice"};val id=UUID.randomUUID().toString();val normalized=PcmTransform.trimSilence(PcmTransform.resamplePcm16(pcm,sampleRate,24_000),24_000)
         require(normalized.size>=24_000*2){"Reference needs at least one second of clear speech"}
         val file=File(root,"$id.wav");writeWav(file,normalized,24_000)
-        return VoiceProfile(id,name,Languages.normalized(language).ifBlank{"en-US"},"pocket",MODEL_VERSION,file.absolutePath,System.currentTimeMillis()).also{save(profiles()+it)}
+        return VoiceProfile(id,name,Languages.normalized(language).ifBlank{"en-US"},engineId,profileModelVersion,file.absolutePath,System.currentTimeMillis()).also{save(profiles()+it)}
     }
     fun rename(id:String,name:String):Boolean {val trimmed=name.trim();if(trimmed.isBlank())return false;val items=profiles();if(items.none{it.id==id})return false;save(items.map{if(it.id==id)it.copy(name=trimmed)else it});return true}
     fun reference(profile:VoiceProfile):AudioData {val bytes=File(profile.referenceFile).readBytes();require(bytes.size>44){"Reference recording is empty"};return AudioData(24_000,bytes.copyOfRange(44,bytes.size))}
