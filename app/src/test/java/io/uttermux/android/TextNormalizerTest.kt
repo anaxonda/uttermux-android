@@ -14,4 +14,10 @@ class TextNormalizerTest {
     @Test fun stripsSpeakWrapperWithoutSpeakingClosingTag(){
         assertEquals("Hello & goodbye.",TextNormalizer.readerText("<speak>Hello &amp; goodbye.</speak>"))
     }
+    @Test fun affectedLocalModelsExpandNegativeContractionsWithoutTouchingOtherEngines(){
+        val text="Wasn't ready and didn't answer."
+        assertEquals("Was not ready and did not answer.",TextNormalizer.modelText(text,"vits"))
+        assertEquals("Was not ready and did not answer.",TextNormalizer.modelText(text,"pocket"))
+        assertEquals(text,TextNormalizer.modelText(text,"kokoro"))
+    }
 }

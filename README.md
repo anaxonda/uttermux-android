@@ -201,6 +201,14 @@ Enable the compatibility server in UtterMux and install `TTS.koplugin` under
 KOReader no longer
 waits for a complete passage before hearing audio.
 
+Android pause/resume and UTF-8-safe ebook normalization require the maintained
+[`koreader/uttermux-v2.patch`](koreader/uttermux-v2.patch). The patch preserves
+the current server handle across Pause/Play, orders the localhost pause request,
+and removes legacy Windows-1252 byte substitutions which corrupt UTF-8 curly
+apostrophes into spoken “TM.” See [`koreader/README.md`](koreader/README.md) for
+the compatibility contract. The desktop bridge uses position-preserving
+`/stop` and must not receive the Android `/pause` portion unchanged.
+
 ## Model policy
 
 Only models in **Models available in the Android app** appear in the voice

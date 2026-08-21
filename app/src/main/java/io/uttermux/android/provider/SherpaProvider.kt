@@ -173,7 +173,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     override fun synthesize(voice:VoiceRecord,text:String,language:String,speed:Float,cancelled:AtomicBoolean):AudioData {
         val spec=allSpecs().first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
         if(cancelled.get())throw InterruptedException()
-        val generated=synchronized(runtimeLock){engine(spec).generateWithConfig(text,generationConfig(spec,speed))}
+        val modelEngine=manager.model(spec.model).engine
+        val generated=synchronized(runtimeLock){engine(spec).generateWithConfig(TextNormalizer.modelText(text,modelEngine),generationConfig(spec,speed))}
         val bytes=ByteArray(generated.samples.size*2);generated.samples.forEachIndexed{i,value->val sample=(value.coerceIn(-1f,1f)*32767).toInt();bytes[i*2]=sample.toByte();bytes[i*2+1]=(sample shr 8).toByte()}
         return AudioData(generated.sampleRate,bytes)
     }
@@ -181,19 +182,21 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         val voice=session.voice
         val spec=allSpecs().first{it.voice.id==voice.id};require(manager.installed(spec.model)){"Download ${spec.model} first"}
         var sequence=0
-        val segments=if(manager.model(spec.model).engine=="pocket")
+        val modelEngine=manager.model(spec.model).engine
+        val segments=if(modelEngine=="pocket")
             TextSegmenter.split(text,firstTarget=45,nextTarget=60,maxChars=90,boundaries=".!?;,:\n")
         else TextSegmenter.split(text)
         synchronized(runtimeLock){val tts=engine(spec);for(segment in segments) {
             if(cancelled.get())throw InterruptedException()
             val began=System.nanoTime()
-            if(manager.model(spec.model).engine=="vits") {
-                val generated=tts.generateWithConfig(segment.text,generationConfig(spec,speed))
+            val modelText=TextNormalizer.modelText(segment.text,modelEngine)
+            if(modelEngine=="vits") {
+                val generated=tts.generateWithConfig(modelText,generationConfig(spec,speed))
                 val audio=PcmTransform.trimSilence(pcm(generated.samples),generated.sampleRate)
                 if(audio.isNotEmpty()&&!emit(AudioChunk(audio,generated.sampleRate,segment.range,sequence++,System.nanoTime()-began)))return
             } else {
                 var callbackUsed=false;var chunkBegan=began
-                val generated=tts.generateWithConfig(segment.text,generationConfig(spec,speed),ChunkCallback{samples->
+                val generated=tts.generateWithConfig(modelText,generationConfig(spec,speed),ChunkCallback{samples->
                     callbackUsed=true;val now=System.nanoTime();val elapsed=now-chunkBegan;chunkBegan=now
                     if(cancelled.get()||!emit(AudioChunk(pcm(samples),tts.sampleRate(),segment.range,sequence++,elapsed)))0 else 1
                 })
