@@ -27,8 +27,18 @@ class VoiceDiscoveryTest {
             VoiceDiscovery.index(voice(ProviderIds.SHERPA,"Kokoro 82M","fr-FR",false,"female","balanced"),true,"Local / sherpa-onnx"),
             VoiceDiscovery.index(voice("edge","Edge Neural","fr-FR",true,"male","cloud"),true,"Edge"),
         )
-        val shown=VoiceDiscovery.filter(entries,VoiceFilters(language="French",library="kokoro",locality="on-device",gender="female"))
+        val shown=VoiceDiscovery.filter(entries,VoiceFilters(language="fr-FR",library="Kokoro",locality="on-device",gender="female"))
         assertEquals(1,shown.size);assertEquals("Kokoro",shown.single().library)
-        assertTrue(VoiceDiscovery.filter(entries,VoiceFilters(library="edge",locality="on-device")).isEmpty())
+        assertTrue(VoiceDiscovery.filter(entries,VoiceFilters(library="Edge",locality="on-device")).isEmpty())
+        assertEquals(1,VoiceDiscovery.filter(entries,VoiceFilters(locality="offline")).size)
+        assertEquals("edge",VoiceDiscovery.filter(entries,VoiceFilters(locality="online")).single().voice.provider)
+    }
+
+    @Test fun selectedFacetsAreExactRatherThanSubstringQueries(){
+        val entries=listOf(
+            VoiceDiscovery.index(voice("edge","Edge Neural","ar"),true,"Edge"),
+            VoiceDiscovery.index(voice("edge","Edge Neural","ar-EG"),true,"Edge"),
+        )
+        assertEquals(listOf("ar"),VoiceDiscovery.filter(entries,VoiceFilters(language="ar")).single().voice.languages.toList())
     }
 }

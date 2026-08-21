@@ -11,7 +11,7 @@ Android readers one interface for local ONNX models and online providers, and
 also implements the loopback protocol used by KOReader's `TTS.koplugin`.
 
 > **Status:** beta. No model weights are bundled. Local artifacts are downloaded
-> only after the user selects Install.
+> only after the user selects Download.
 
 | Voice catalog | Dedicated filters | Voice creation | Settings and providers |
 | --- | --- | --- | --- |
@@ -24,10 +24,10 @@ also implements the loopback protocol used by KOReader's `TTS.koplugin`.
 - Early `onStart`, adaptively reserved incremental PCM delivery, exact text
   ranges, cancellation, engine warming, segmented Piper synthesis, and bounded
   silence trimming.
-- A pre-indexed, debounced voice catalog with dependent voice-library and
-  model/version searches plus independent voice, language, and accent searches;
-  availability, location, capability, cost, performance, gender, size, and
-  speed controls; one-tap clearing; exact-voice previews;
+- A pre-indexed, debounced voice catalog with a searchable, single-select screen
+  for every filter dimension; dependent result counts; availability, location,
+  capability, cost, performance, gender, size, and speed controls; one-tap
+  clearing; exact-voice previews;
   ordered BCP-47 fallback routes, model downloads, settings, and diagnostics.
 - Full Piper catalog (174 models and 2,707 speaker choices), all 53 Kokoro 1.0
   speakers, the 103-speaker Kokoro 1.1 FP32 option, all eight Kitten speakers,
@@ -46,11 +46,12 @@ excluded from backup and device transfer.
 
 ## App navigation
 
-- **Voices** shows the active voice, filtered result count, and voice cards. A
-  separate **Filters** screen searches voice name, language, library,
-  model/version, and accent and filters on-device/cloud readiness, capability,
-  cost, performance, gender, and size/speed order. Searchable pickers open their
-  list before opening the keyboard.
+- **Voices** shows the active voice, result count, voice cards, and only the
+  filters currently in use. The **Filter** menu chooses a dimension; each
+  dimension opens a full-screen searchable chooser rather than a popup list.
+  Choosers show conditional voice counts, alphabetical/count sorting for large
+  lists, and single selection. Location uses Offline/Online consistently with
+  the desktop app.
 - **Create** records or imports a permitted reference sample for Pocket or the
   Qwen device-preview runtime, previews source and generated audio, and manages
   engine-specific private profiles.
@@ -180,6 +181,12 @@ Families, runnable variants, voices, and artifacts are separate records, so
 Linux and Android can use different runtimes for one model family without
 presenting unsupported rows on either platform. The build validates the schema
 and requires the pinned Android Qwen device-preview variant.
+
+`catalog.lock.json` records the exact Linux commit, catalog SHA-256, and source
+provenance. Android CI validates it offline. A daily, manually dispatchable
+workflow checks Linux `main`; when the catalog changes it validates the new
+catalog and opens or updates a reviewable Android pull request. Android builds
+never download a mutable catalog.
 
 Cloud catalogs are different: account, region, and API changes make a committed
 voice snapshot stale. Each provider adapter discovers its live voices and

@@ -23,6 +23,8 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Verify native provenance
         run: ./native/verify-provenance.sh
+      - name: Verify pinned catalog
+        run: python3 scripts/sync-catalog.py --check
       - name: Unit tests and lint
         run: ./gradlew testIsolatedHostUnitTest lintDebug
       - name: Build APK

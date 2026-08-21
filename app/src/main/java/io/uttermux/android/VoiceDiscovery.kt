@@ -73,11 +73,14 @@ object VoiceDiscovery {
     }
 
     fun filter(entries:List<VoiceSearchEntry>,filters:VoiceFilters):List<VoiceSearchEntry> {
-        fun String.has(query:String)=query.isBlank()||contains(query.trim(),true)
         return entries.asSequence().filter{entry->
             val voice=entry.voice
-            entry.searchableVoice.has(filters.voice)&&entry.searchableLanguage.has(filters.language)&&entry.searchableLibrary.has(filters.library)&&entry.searchableModel.has(filters.model)&&entry.searchableAccent.has(filters.accent)&&
-                (filters.locality=="all"||(filters.locality=="on-device"&&!voice.networkRequired)||(filters.locality=="cloud"&&voice.networkRequired))&&
+            (filters.voice.isBlank()||voice.name.equals(filters.voice,true))&&
+                (filters.language.isBlank()||voice.languages.any{it.equals(filters.language,true)})&&
+                (filters.library.isBlank()||entry.library.equals(filters.library,true))&&
+                (filters.model.isBlank()||entry.model.equals(filters.model,true))&&
+                (filters.accent.isBlank()||voice.accent.equals(filters.accent,true))&&
+                (filters.locality=="all"||(filters.locality in setOf("on-device","offline")&&!voice.networkRequired)||(filters.locality in setOf("cloud","online")&&voice.networkRequired))&&
                 (filters.readiness=="all"||(filters.readiness=="ready"&&entry.ready)||(filters.readiness=="downloadable"&&!entry.ready&&voice.downloadable)||(filters.readiness=="setup"&&!entry.ready&&!voice.downloadable))&&
                 (filters.performance=="all"||voice.performanceClass.equals(filters.performance,true))&&
                 (filters.gender=="all"||voice.gender.equals(filters.gender,true))&&

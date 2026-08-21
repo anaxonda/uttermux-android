@@ -8,7 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -47,24 +49,25 @@ class MainActivity:ComponentActivity(){
     }
 }
 
-private enum class Page(val label:String){VOICES("Voices"),FILTERS("Filters"),CREATE("Create"),TUNE("Test"),SETTINGS("Settings")}
+private enum class Page(val label:String){VOICES("Voices"),FILTER_CHOOSER("Filter"),CREATE("Create"),TUNE("Test"),SETTINGS("Settings")}
+private enum class FilterKey(val label:String){VOICE("Voice"),LANGUAGE("Language"),LIBRARY("Voice library"),MODEL("Model / version"),ACCENT("Accent / region"),LOCATION("Location"),AVAILABILITY("Availability"),PERFORMANCE("Performance"),GENDER("Gender"),CAPABILITY("Capability"),COST("Cost"),SORT("Sort")}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun UtterMuxManager(theme:String,onTheme:(String)->Unit){
-    val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by rememberSaveable{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")};var voiceCatalog by remember{mutableStateOf<VoiceCatalogUi?>(null)};var testArtifact by rememberSaveable{mutableStateOf("")}
+    val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by rememberSaveable{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")};var voiceCatalog by remember{mutableStateOf<VoiceCatalogUi?>(null)};var testArtifact by rememberSaveable{mutableStateOf("")};var filterKey by rememberSaveable{mutableStateOf(FilterKey.LANGUAGE)}
     val previewState by PreviewController.state.collectAsState();val previewBusy=previewState.phase in setOf("loading","playing")
     val filters=rememberVoiceFilterState();val voiceListState=rememberLazyListState()
-    BackHandler(page==Page.FILTERS){page=Page.VOICES}
+    BackHandler(page==Page.FILTER_CHOOSER){page=Page.VOICES}
     LaunchedEffect(revision){voiceCatalog=withContext(Dispatchers.Default){buildVoiceCatalog(app)}}
     fun refresh(){scope.launch{status="Refreshing catalogs…";val errors=withContext(Dispatchers.IO){app.refreshCatalogs()};revision++;status=if(errors.isEmpty())"Catalogs refreshed" else errors.joinToString()}}
-    Scaffold(topBar={TopAppBar(title={Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){if(previewState.phase=="loading")CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp);Column{Text("UtterMux");Text(if(previewBusy)previewState.message else status,style=MaterialTheme.typography.labelSmall)}}})},bottomBar={NavigationBar{
+    Scaffold(topBar={if(page!=Page.FILTER_CHOOSER)TopAppBar(title={Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){if(previewState.phase=="loading")CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp);Column{Text("UtterMux");Text(if(previewBusy)previewState.message else status,style=MaterialTheme.typography.labelSmall)}}})},bottomBar={if(page!=Page.FILTER_CHOOSER)NavigationBar{
         NavigationBarItem(selected=page==Page.VOICES,onClick={page=Page.VOICES},icon={Text("◉")},label={Text("Voices")})
         NavigationBarItem(selected=page==Page.CREATE,onClick={page=Page.CREATE},icon={Text("＋")},label={Text("Create")})
         NavigationBarItem(selected=page==Page.TUNE,onClick={testArtifact="";page=Page.TUNE},icon={Text("⌁")},label={Text("Test")})
         NavigationBarItem(selected=page==Page.SETTINGS,onClick={page=Page.SETTINGS},icon={Text("⚙")},label={Text("Settings")})
     }}){padding->Box(Modifier.padding(padding)){when(page){
-        Page.VOICES->VoicesPage(revision,voiceCatalog,filters,voiceListState,{page=Page.FILTERS},{revision++},{artifact->testArtifact=artifact;page=Page.TUNE},{status=it})
-        Page.FILTERS->FilterPage(voiceCatalog,filters){page=Page.VOICES}
+        Page.VOICES->VoicesPage(revision,voiceCatalog,filters,voiceListState,{key->filterKey=key;page=Page.FILTER_CHOOSER},{revision++},{artifact->testArtifact=artifact;page=Page.TUNE},{status=it})
+        Page.FILTER_CHOOSER->FilterChooserPage(voiceCatalog,filters,filterKey){page=Page.VOICES}
         Page.CREATE->CreateVoicePage(revision,{revision++},{status=it})
         Page.TUNE->BenchmarkPage(testArtifact){status=it}
         Page.SETTINGS->ModernSettingsPage(revision,theme,onTheme,{refresh()},{revision++},{status=it})
@@ -77,6 +80,11 @@ private class VoiceFilterState(private val initial:List<String> = emptyList()){
     var locality by mutableStateOf(value(5,"all"));var readiness by mutableStateOf(value(6,"all"));var performance by mutableStateOf(value(7,"all"));var gender by mutableStateOf(value(8,"all"));var capability by mutableStateOf(value(9,"all"));var cost by mutableStateOf(value(10,"all"));var sort by mutableStateOf(value(11,"name"))
     fun values()=listOf(voiceSearch,languageSearch,librarySearch,modelSearch,accentSearch,locality,readiness,performance,gender,capability,cost,sort)
     fun clear(){voiceSearch="";languageSearch="";librarySearch="";modelSearch="";accentSearch="";locality="all";readiness="all";performance="all";gender="all";capability="all";cost="all";sort="name"}
+    fun get(key:FilterKey)=when(key){FilterKey.VOICE->voiceSearch;FilterKey.LANGUAGE->languageSearch;FilterKey.LIBRARY->librarySearch;FilterKey.MODEL->modelSearch;FilterKey.ACCENT->accentSearch;FilterKey.LOCATION->locality;FilterKey.AVAILABILITY->readiness;FilterKey.PERFORMANCE->performance;FilterKey.GENDER->gender;FilterKey.CAPABILITY->capability;FilterKey.COST->cost;FilterKey.SORT->sort}
+    fun set(key:FilterKey,value:String){when(key){FilterKey.VOICE->voiceSearch=value;FilterKey.LANGUAGE->languageSearch=value;FilterKey.LIBRARY->{librarySearch=value;modelSearch=""};FilterKey.MODEL->modelSearch=value;FilterKey.ACCENT->accentSearch=value;FilterKey.LOCATION->locality=value;FilterKey.AVAILABILITY->readiness=value;FilterKey.PERFORMANCE->performance=value;FilterKey.GENDER->gender=value;FilterKey.CAPABILITY->capability=value;FilterKey.COST->cost=value;FilterKey.SORT->sort=value}}
+    fun clear(key:FilterKey)=set(key,if(key==FilterKey.SORT)"name" else if(key in setOf(FilterKey.LOCATION,FilterKey.AVAILABILITY,FilterKey.PERFORMANCE,FilterKey.GENDER,FilterKey.CAPABILITY,FilterKey.COST))"all" else "")
+    fun active()=FilterKey.entries.filter{key->val value=get(key);if(key==FilterKey.SORT)value!="name" else value.isNotBlank()&&value!="all"}
+    fun query(omit:FilterKey?=null)=VoiceFilters(if(omit==FilterKey.VOICE)"" else voiceSearch,if(omit==FilterKey.LANGUAGE)"" else languageSearch,if(omit==FilterKey.LIBRARY)"" else librarySearch,if(omit==FilterKey.MODEL)"" else modelSearch,if(omit==FilterKey.ACCENT)"" else accentSearch,if(omit==FilterKey.LOCATION)"all" else locality,if(omit==FilterKey.AVAILABILITY)"all" else readiness,if(omit==FilterKey.PERFORMANCE)"all" else performance,if(omit==FilterKey.GENDER)"all" else gender,if(omit==FilterKey.CAPABILITY)"all" else capability,if(omit==FilterKey.COST)"all" else cost,if(omit==FilterKey.SORT)"name" else sort)
 }
 private val VoiceFilterSaver=androidx.compose.runtime.saveable.Saver<VoiceFilterState,ArrayList<String>>(save={ArrayList(it.values())},restore={VoiceFilterState(it)})
 @Composable private fun rememberVoiceFilterState()=rememberSaveable(saver=VoiceFilterSaver){VoiceFilterState()}
@@ -99,20 +107,19 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
     return VoiceCatalogUi(entries,voices,languages,libraries,models,accents,performances,genders,capabilities,app.router.effectiveDefault())
 }
 
-@Composable private fun VoicesPage(revision:Int,snapshot:VoiceCatalogUi?,filters:VoiceFilterState,listState:LazyListState,onFilters:()->Unit,onChanged:()->Unit,onTest:(String)->Unit,onStatus:(String)->Unit){
+@Composable private fun VoicesPage(revision:Int,snapshot:VoiceCatalogUi?,filters:VoiceFilterState,listState:LazyListState,onFilter:(FilterKey)->Unit,onChanged:()->Unit,onTest:(String)->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance
     var defaultVoice by rememberSaveable{mutableStateOf(app.settings.defaultVoice)};var shown by remember{mutableStateOf<List<VoiceSearchEntry>>(emptyList())}
     LaunchedEffect(revision){defaultVoice=app.settings.defaultVoice}
     LaunchedEffect(snapshot,filters.voiceSearch,filters.languageSearch,filters.librarySearch,filters.modelSearch,filters.accentSearch,filters.locality,filters.readiness,filters.performance,filters.gender,filters.capability,filters.cost,filters.sort){
         if(snapshot==null){shown=emptyList();return@LaunchedEffect};delay(60)
-        val query=VoiceFilters(filters.voiceSearch,filters.languageSearch,filters.librarySearch,filters.modelSearch,filters.accentSearch,filters.locality,filters.readiness,filters.performance,filters.gender,filters.capability,filters.cost,filters.sort)
-        shown=withContext(Dispatchers.Default){VoiceDiscovery.filter(snapshot.entries,query)}
+        shown=withContext(Dispatchers.Default){VoiceDiscovery.filter(snapshot.entries,filters.query())}
     }
     if(snapshot==null){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};return}
     val selected=snapshot.entries.firstOrNull{it.voice.id==defaultVoice&&it.ready}?.voice;val effectiveDefault=selected?:snapshot.effectiveDefault
     val configuredReady=selected!=null
     val activity by VoiceActivity.state.collectAsState()
-    val filtersActive=listOf(filters.voiceSearch,filters.languageSearch,filters.librarySearch,filters.modelSearch,filters.accentSearch).any(String::isNotBlank)||listOf(filters.locality,filters.readiness,filters.performance,filters.gender,filters.capability,filters.cost).any{it!="all"}||filters.sort!="name"
+    val activeFilters=filters.active();var filterMenuOpen by remember{mutableStateOf(false)}
     LazyColumn(Modifier.fillMaxSize().padding(12.dp),state=listState,verticalArrangement=Arrangement.spacedBy(8.dp)){
         if(snapshot.entries.none{it.ready})item{Card{Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text("No voice is installed or configured",style=MaterialTheme.typography.titleMedium);Text("Download an offline voice below or configure an online provider in Settings. UtterMux intentionally bundles no voice model.");Button(onClick={app.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}){Text("Android TTS settings")}}}}
         if(!configuredReady&&effectiveDefault!=null)item{Card{Text("Configured default is unavailable. Currently using ${effectiveDefault.name}; the saved preference will be restored automatically if its provider becomes available.",Modifier.padding(12.dp))}}
@@ -122,29 +129,55 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
             Text(when(activity.status){"speaking"->"Speaking in ${activity.language} for ${activity.client}";"warming"->"Loading voice";else->"Configured default: ${selected?.name?:app.settings.defaultVoice}"},style=MaterialTheme.typography.bodySmall)
             if(activity.fallbackReason.isNotBlank())Text(activity.fallbackReason,style=MaterialTheme.typography.labelSmall)
         }}}
-        item{Card(Modifier.fillMaxWidth()){Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){Column(Modifier.weight(1f)){Text("Voice catalog",style=MaterialTheme.typography.titleMedium);Text(if(filtersActive)"Filters active · ${shown.size} results" else "${shown.size} voices · all locations",style=MaterialTheme.typography.bodySmall)};OutlinedButton(onClick=onFilters){Text(if(filtersActive)"Edit filters" else "Filter")}}}}
+        item{
+            Card(Modifier.fillMaxWidth()){
+                Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                        Column(Modifier.weight(1f)){Text("Voice catalog",style=MaterialTheme.typography.titleMedium);Text(if(activeFilters.isNotEmpty())"${shown.size} results" else "${shown.size} voices · all locations",style=MaterialTheme.typography.bodySmall)}
+                        Box{
+                            OutlinedButton(onClick={filterMenuOpen=true}){Text("Filter")}
+                            DropdownMenu(filterMenuOpen,{filterMenuOpen=false}){FilterKey.entries.forEach{key->DropdownMenuItem(text={Text(key.label)},onClick={filterMenuOpen=false;onFilter(key)})}}
+                        }
+                    }
+                    if(activeFilters.isNotEmpty())LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){
+                        items(activeFilters,key={it.name}){key->InputChip(selected=true,onClick={onFilter(key)},label={Text("${key.label}: ${filterDisplay(snapshot,key,filters.get(key))}")},trailingIcon={IconButton(onClick={filters.clear(key)},Modifier.size(24.dp)){Text("×")}})}
+                    }
+                }
+            }
+        }
         items(shown,key={it.voice.id}){entry->val voice=entry.voice;VoiceCard(voice,"${entry.library} · ${entry.model}",entry.ready,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},onTest,{onStatus(it)})}
     }
 }
 
-@Composable private fun FilterPage(snapshot:VoiceCatalogUi?,filters:VoiceFilterState,onDone:()->Unit){
+private data class FilterOption(val value:String,val label:String,val count:Int=0)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun FilterChooserPage(snapshot:VoiceCatalogUi?,filters:VoiceFilterState,key:FilterKey,onDone:()->Unit){
     if(snapshot==null){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};return}
-    val modelOptions=remember(snapshot.models,filters.librarySearch){if(filters.librarySearch.isBlank())snapshot.models else snapshot.entries.filter{it.library.contains(filters.librarySearch,true)}.map{Suggestion(it.model,it.model)}.distinctBy{it.value}.sortedBy{it.label}}
+    var search by rememberSaveable(key){mutableStateOf("")};var countSort by rememberSaveable(key){mutableStateOf(false)}
+    val baseOptions=remember(snapshot,key,filters.librarySearch){filterOptions(snapshot,key,filters.librarySearch)}
+    val options=remember(baseOptions,search,countSort,filters.values()){
+        val candidates=VoiceDiscovery.filter(snapshot.entries,filters.query(key))
+        baseOptions.map{option->option.copy(count=if(key==FilterKey.SORT)candidates.size else candidates.count{entry->optionMatches(entry,key,option.value)})}.filter{it.label.contains(search,true)||it.value.contains(search,true)}.sortedWith(if(countSort)compareByDescending<FilterOption>{it.count}.thenBy{it.label.lowercase()}else compareBy{it.label.lowercase()})
+    }
     LazyColumn(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){Text("Filter voices",Modifier.weight(1f),style=MaterialTheme.typography.headlineSmall);TextButton(onClick={filters.clear()}){Text("Clear all")}}}
-        item{Text("Choose exact fields or type a search. Results update when you return to Voices.",style=MaterialTheme.typography.bodySmall)}
-        item{SuggestionSearchField("Voice or keyword",filters.voiceSearch,snapshot.voices){filters.voiceSearch=it}}
-        item{SuggestionSearchField("Language",filters.languageSearch,snapshot.languages){filters.languageSearch=it}}
-        item{SuggestionSearchField("Voice library",filters.librarySearch,snapshot.libraries){filters.librarySearch=it;filters.modelSearch=""}}
-        item{SuggestionSearchField("Model / version",filters.modelSearch,modelOptions){filters.modelSearch=it}}
-        item{SuggestionSearchField("Accent or region",filters.accentSearch,snapshot.accents){filters.accentSearch=it}}
-        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Location",filters.locality,listOf("all","on-device","cloud")){filters.locality=it}};Box(Modifier.weight(1f)){Selector("Availability",filters.readiness,listOf("all","ready","downloadable","setup")){filters.readiness=it}}}}
-        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Performance",filters.performance,listOf("all")+snapshot.performances){filters.performance=it}};Box(Modifier.weight(1f)){Selector("Gender",filters.gender,listOf("all")+snapshot.genders){filters.gender=it}}}}
-        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Capability",filters.capability,listOf("all")+snapshot.capabilities){filters.capability=it}};Box(Modifier.weight(1f)){Selector("Cost",filters.cost,listOf("all","free","metered","subscription")){filters.cost=it}}}}
-        item{Selector("Sort",filters.sort,listOf("name","library","smallest","fastest")){filters.sort=it}}
-        item{Button(onClick=onDone,modifier=Modifier.fillMaxWidth()){Text("Show voices")}}
+        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick=onDone){Text("← Back")};Text(key.label,Modifier.weight(1f),style=MaterialTheme.typography.headlineSmall);if(filters.get(key).let{it.isNotBlank()&&it!="all"&&!(key==FilterKey.SORT&&it=="name")})TextButton(onClick={filters.clear(key);onDone()}){Text("Clear")}}}
+        if(baseOptions.size>8)item{OutlinedTextField(search,{search=it},Modifier.fillMaxWidth(),label={Text("Search ${key.label.lowercase()}")},singleLine=true)}
+        if(baseOptions.size>8)item{SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()){SegmentedButton(!countSort,{countSort=false},SegmentedButtonDefaults.itemShape(0,2)){Text("A–Z")};SegmentedButton(countSort,{countSort=true},SegmentedButtonDefaults.itemShape(1,2)){Text("Most matches")}}}
+        item{Text("${options.size} choices · counts respect your other filters",style=MaterialTheme.typography.bodySmall)}
+        items(options,key={it.value}){option->ListItem(headlineContent={Text(option.label)},supportingContent={if(key!=FilterKey.SORT)Text("${option.count} matching voice${if(option.count==1)"" else "s"}")},leadingContent={RadioButton(filters.get(key)==option.value,onClick=null)},modifier=Modifier.fillMaxWidth().clickable(enabled=option.count>0||key==FilterKey.SORT){filters.set(key,option.value);onDone()});HorizontalDivider()}
     }
 }
+
+private fun filterDisplay(snapshot:VoiceCatalogUi?,key:FilterKey,value:String)=filterOptions(snapshot,key,"").firstOrNull{it.value==value}?.label?:value
+private fun filterOptions(snapshot:VoiceCatalogUi?,key:FilterKey,library:String):List<FilterOption>{
+    fun suggestions(values:List<Suggestion>)=values.map{FilterOption(it.value,it.label)}
+    return when(key){
+        FilterKey.VOICE->suggestions(snapshot?.voices.orEmpty());FilterKey.LANGUAGE->suggestions(snapshot?.languages.orEmpty());FilterKey.LIBRARY->suggestions(snapshot?.libraries.orEmpty())
+        FilterKey.MODEL->suggestions(if(snapshot==null)emptyList() else if(library.isBlank())snapshot.models else snapshot.entries.filter{it.library.contains(library,true)}.map{Suggestion(it.model,it.model)}.distinctBy{it.value})
+        FilterKey.ACCENT->suggestions(snapshot?.accents.orEmpty());FilterKey.LOCATION->listOf(FilterOption("offline","Offline"),FilterOption("online","Online"));FilterKey.AVAILABILITY->listOf(FilterOption("ready","Ready"),FilterOption("downloadable","Downloadable"),FilterOption("setup","Setup required"));FilterKey.PERFORMANCE->snapshot?.performances.orEmpty().map{FilterOption(it,it.replaceFirstChar(Char::uppercase))};FilterKey.GENDER->snapshot?.genders.orEmpty().map{FilterOption(it,it.replaceFirstChar(Char::uppercase))};FilterKey.CAPABILITY->snapshot?.capabilities.orEmpty().map{FilterOption(it,it.replace('-', ' ').replaceFirstChar(Char::uppercase))};FilterKey.COST->listOf("free","metered","subscription").map{FilterOption(it,it.replaceFirstChar(Char::uppercase))};FilterKey.SORT->listOf(FilterOption("name","Name"),FilterOption("library","Voice library"),FilterOption("smallest","Smallest download"),FilterOption("fastest","Fastest first"))
+    }
+}
+private fun optionMatches(entry:VoiceSearchEntry,key:FilterKey,value:String)=when(key){FilterKey.VOICE->entry.voice.name.equals(value,true);FilterKey.LANGUAGE->entry.voice.languages.any{it.equals(value,true)};FilterKey.LIBRARY->entry.library.equals(value,true);FilterKey.MODEL->entry.model.equals(value,true);FilterKey.ACCENT->entry.voice.accent.equals(value,true);FilterKey.LOCATION->if(value=="offline")!entry.voice.networkRequired else entry.voice.networkRequired;FilterKey.AVAILABILITY->when(value){"ready"->entry.ready;"downloadable"->!entry.ready&&entry.voice.downloadable;else->!entry.ready&&!entry.voice.downloadable};FilterKey.PERFORMANCE->entry.voice.performanceClass.equals(value,true);FilterKey.GENDER->entry.voice.gender.equals(value,true);FilterKey.CAPABILITY->value in entry.voice.capabilities;FilterKey.COST->VoiceDiscovery.cost(entry.voice).equals(value,true);FilterKey.SORT->true}
 
 private data class Suggestion(val value:String,val label:String)
 @OptIn(ExperimentalMaterial3Api::class)

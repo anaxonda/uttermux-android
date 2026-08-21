@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- Moved voice filtering to a dedicated screen and refreshed app screenshots.
+- Replaced value popups with per-dimension searchable filter screens, compact
+  active-filter chips, dependent result counts, and persistent filter state.
+- Added a provenance-locked shared catalog plus a daily validated catalog-sync
+  pull-request workflow.
+- Refreshed README and Fastlane screenshots.
 - Added direct active-voice selection to installed-model test cards.
 - Documented shared catalog ownership, Linux interoperability, and remaining
   F-Droid release blockers.

@@ -1,0 +1,54 @@
+name: Catalog sync
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Sync canonical catalog
+        run: python3 scripts/sync-catalog.py
+      - id: changes
+        run: |
+          if git diff --quiet -- app/src/main/assets/catalog/v2; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate proposed catalog
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python3 scripts/sync-catalog.py --check
+          ./native/verify-provenance.sh
+          ./gradlew validateGeneratedCatalog testIsolatedHostUnitTest lintDebug assembleDebug
+      - name: Commit update branch
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch=automation/catalog-sync
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$branch"
+          git add app/src/main/assets/catalog/v2/catalog.json app/src/main/assets/catalog/v2/catalog.lock.json
+          git commit -m 'catalog: sync canonical Linux catalog'
+          git push --force-with-lease origin "$branch"
+          gh pr view "$branch" >/dev/null 2>&1 || gh pr create --base main --head "$branch" --title 'catalog: sync canonical Linux catalog' --body 'Automated, pinned catalog update from `anaxonda/uttermux-linux`. The workflow validated the lock, unit tests, lint, and debug APK before opening this PR.'

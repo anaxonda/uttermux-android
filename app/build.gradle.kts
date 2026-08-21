@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.plugin.compose") }
 
 val releaseKeystorePath=System.getenv("ANDROID_KEYSTORE_PATH")
@@ -74,10 +76,15 @@ dependencies {
 
 val validateGeneratedCatalog by tasks.registering {
     val catalog=layout.projectDirectory.file("src/main/assets/catalog/v2/catalog.json")
-    inputs.file(catalog)
+    val lock=layout.projectDirectory.file("src/main/assets/catalog/v2/catalog.lock.json")
+    inputs.files(catalog,lock)
     doLast {
         val document=groovy.json.JsonSlurper().parse(catalog.asFile) as Map<*,*>
+        val pinned=groovy.json.JsonSlurper().parse(lock.asFile) as Map<*,*>
         check(document["schemaVersion"]==2){"Unsupported generated catalog schema"}
+        val digest=MessageDigest.getInstance("SHA-256").digest(catalog.asFile.readBytes()).joinToString(""){"%02x".format(it.toInt() and 0xff)}
+        check(pinned["sha256"]==digest){"Generated catalog does not match catalog.lock.json"}
+        check(pinned["provenance"]==document["provenance"]){"Generated catalog provenance does not match catalog.lock.json"}
         val variants=document["variants"] as List<*>
         check(variants.filterIsInstance<Map<*,*>>().any{it["id"]=="qwen3-tts-0.6b-base-q4km"&&it["status"]=="device-preview"}){
             "Generated catalog is missing the Android Qwen device-preview variant"
