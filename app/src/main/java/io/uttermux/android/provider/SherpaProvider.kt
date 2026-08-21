@@ -222,7 +222,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     }
     private fun create(model:LocalModel,root:File,language:String):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath
-        val automaticThreads=if(model.engine=="pocket")2 else 4
+        val coreCount=Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val automaticThreads=minOf(coreCount,if(model.engine=="pocket")2 else 4)
         val config=OfflineTtsModelConfig(numThreads=settings.engineThreads.takeIf{it>0}?:automaticThreads)
         when(model.engine){
             "vits"->config.vits=OfflineTtsVitsModelConfig(model=path(model.model),tokens=path(model.tokens),dataDir=path(model.dataDir))

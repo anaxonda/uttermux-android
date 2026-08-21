@@ -202,8 +202,10 @@ Only models in **Models available in the Android app** appear in the voice
 catalog. Entries under **Evaluated models not included** are documentation only.
 Local model downloads require an explicit install action.
 Pocket reuses one runtime/model with cached reference WAV files. Its one-to-five-step
-quality selector trades generation latency for refinement; two steps and two
-threads are the measured defaults on the reference phone. Kokoro uses the supported FP32 graph: the available
+quality selector trades generation latency for refinement. Automatic thread selection
+uses at most two threads for Pocket and four for other local engines, bounded by the
+device's available cores. Two Pocket steps are the fresh quality default; the benchmark
+figures below describe the reference phone rather than a universal optimum. Kokoro uses the supported FP32 graph: the available
 INT8 export is intentionally hidden because current ARM reports include rail-pinned
 audio, tones, and performance regressions. MOSS and ZipVoice are intentionally
 excluded from this release. MOSS did not meet sustained document-reading latency;
