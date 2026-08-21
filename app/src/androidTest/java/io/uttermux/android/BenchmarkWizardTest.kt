@@ -14,9 +14,12 @@ class BenchmarkWizardTest {
     @Test fun syntheticArtifactProducesReviewableAndApplicableResult() {
         val app=InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as UtterMuxApp
         val runner=BenchmarkRunner(app);val voice=runner.installedArtifacts().single{it.provider=="test-host"}
+        val artifact=runner.artifactId(voice);val fingerprint=app.models.artifactFingerprint(artifact)
+        app.settings.setTunedThreads(artifact,2,fingerprint)
         val result=runner.run(voice,AtomicBoolean()){}
         assertEquals(3,result.report.let{org.json.JSONObject(it.readText()).getInt("schemaVersion")})
         assertTrue(result.candidates.isNotEmpty());assertTrue(result.winner.threads>=1)
+        assertEquals("Benchmark candidates must not replace the active profile",2,app.settings.tunedThreads(artifact,fingerprint))
         app.settings.setTunedThreads(result.artifactId,result.winner.threads,result.artifactFingerprint)
         assertEquals(result.winner.threads,app.settings.tunedThreads(result.artifactId,result.artifactFingerprint))
         app.settings.setTunedThreads(result.artifactId,0)

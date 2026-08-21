@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val benchmarkThreads=java.util.concurrent.ConcurrentHashMap<String,Int>()
     var defaultVoice: String
         get() = prefs.getString("default_voice", "uttermux:auto@en")!!
         set(value) { prefs.edit().putString("default_voice", value).apply() }
@@ -31,6 +32,8 @@ class AppSettings(context: Context) {
         set(value){prefs.edit().putInt("engine_threads",value.takeIf{it in 1..16}?:0).apply()}
     fun tuningFingerprint(artifactId:String)=prefs.getString("tuning.$artifactId.fingerprint","").orEmpty()
     fun tunedThreads(artifactId:String,fingerprint:String=""):Int=if(fingerprint.isNotBlank()&&tuningFingerprint(artifactId)!=fingerprint)0 else prefs.getInt("tuning.$artifactId.threads",0)
+    fun effectiveThreads(artifactId:String,fingerprint:String="")=benchmarkThreads[artifactId]?:tunedThreads(artifactId,fingerprint)
+    fun setBenchmarkThreads(artifactId:String,value:Int){if(value in 1..16)benchmarkThreads[artifactId]=value else benchmarkThreads.remove(artifactId)}
     fun setTunedThreads(artifactId:String,value:Int,fingerprint:String=""){
         val edit=prefs.edit();val key="tuning.$artifactId.threads";val fingerprintKey="tuning.$artifactId.fingerprint"
         if(value in 1..16){edit.putInt(key,value);edit.putString(fingerprintKey,fingerprint)}else{edit.remove(key);edit.remove(fingerprintKey)};edit.apply()

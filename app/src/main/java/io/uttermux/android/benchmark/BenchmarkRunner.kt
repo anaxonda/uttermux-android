@@ -19,7 +19,10 @@ import kotlin.math.abs
 data class CandidateSummary(val threads:Int,val medianRtf:Double,val medianFirstAudioMs:Double,val peakPssMb:Int,val underruns:Int,val stable:Boolean)
 data class BenchmarkOutcome(val artifactId:String,val artifactFingerprint:String,val voice:VoiceRecord,val candidates:List<CandidateSummary>,val winner:CandidateSummary,val classification:String,val report:File)
 object BenchmarkPolicy {
-    fun threadCandidates(cores:Int)=listOf(1,2,3,4,6,8).filter{it<=cores.coerceAtLeast(1)}.ifEmpty{listOf(1)}
+    // Four is the safe ceiling for the standard phone sweep. Android reports
+    // heterogeneous efficiency/performance cores as peers; testing 6/8 cores
+    // can make a heavy ONNX graph dramatically slower and starve the UI.
+    fun threadCandidates(cores:Int)=listOf(1,2,3,4).filter{it<=cores.coerceAtLeast(1)}.ifEmpty{listOf(1)}
     fun winner(candidates:List<CandidateSummary>):CandidateSummary {val valid=candidates.filter{it.stable};require(valid.isNotEmpty());val fastest=valid.minOf{it.medianRtf};return valid.filter{it.medianRtf<=fastest*1.05}.minBy{it.threads}}
     fun classification(value:CandidateSummary)=when{value.underruns>0->"marginal";value.medianRtf<=.85->"reader-ready";value.medianRtf<=1.0->"marginal";else->"too-slow"}
 }
@@ -32,7 +35,7 @@ class BenchmarkRunner(private val app:UtterMuxApp) {
 
     fun run(voice:VoiceRecord,cancelled:AtomicBoolean,progress:(String)->Unit):BenchmarkOutcome {
         val artifact=artifactId(voice);require(artifact.isNotBlank()){"Voice has no stable artifact ID"}
-        val provider=app.providers.first{it.id==voice.provider};val fingerprint=app.models.artifactFingerprint(artifact);val oldFingerprint=app.settings.tuningFingerprint(artifact);val old=app.settings.tunedThreads(artifact,oldFingerprint)
+        val provider=app.providers.first{it.id==voice.provider};val fingerprint=app.models.artifactFingerprint(artifact)
         val cores=Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         val candidates=BenchmarkPolicy.threadCandidates(cores)
         val summaries=mutableListOf<CandidateSummary>();val allRuns=JSONArray()
@@ -40,7 +43,7 @@ class BenchmarkRunner(private val app:UtterMuxApp) {
             for(threads in candidates){
                 if(cancelled.get())throw InterruptedException();checkThermal()
                 progress("$artifact: $threads thread${if(threads==1)"" else "s"}")
-                app.settings.setTunedThreads(artifact,threads,fingerprint);provider.trimMemory()
+                app.settings.setBenchmarkThreads(artifact,threads);provider.trimMemory()
                 val runs=mutableListOf<Run>();for(index in 0 until 3){
                     if(cancelled.get())throw InterruptedException();if(index==0)provider.trimMemory()
                     runs+=measure(provider,voice,cancelled,index==0)
@@ -50,7 +53,7 @@ class BenchmarkRunner(private val app:UtterMuxApp) {
                 val summary=CandidateSummary(threads,rtf,first,runs.maxOf{it.pssMb},runs.sumOf{it.underruns},runs.all{it.valid});summaries+=summary
                 allRuns.put(JSONObject().put("threads",threads).put("runs",JSONArray(runs.map{it.json()})))
             }
-        } finally {app.settings.setTunedThreads(artifact,old,oldFingerprint);provider.trimMemory()}
+        } finally {app.settings.setBenchmarkThreads(artifact,0);provider.trimMemory()}
         val winner=runCatching{BenchmarkPolicy.winner(summaries)}.getOrElse{throw IllegalStateException("Every benchmark candidate failed")}
         val classification=BenchmarkPolicy.classification(winner)
         val model=runCatching{app.models.model(artifact)}.getOrNull();val artifactHash=fingerprint

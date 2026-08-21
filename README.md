@@ -251,7 +251,10 @@ model for APIs implementing OpenAI's speech endpoint.
 
 ## Device tuning and model variants
 
-The **Tune** tab benchmarks installed local artifacts only. Each version and
+The **Tune** tab benchmarks installed local artifacts only. Its standard sweep
+tests one through four threads; Android's logical-core count does not distinguish
+performance cores from efficiency cores, and wider heavy-model sweeps can regress
+severely. Each version and
 precision is independent: FP32, FP16, INT8, and GGUF artifacts never share
 results. The sweep records cold and warm first-audio latency, RTF, process
 memory, simulated underruns, and thermal state, then proposes the smallest
@@ -298,8 +301,9 @@ are local engineering measurements, not upstream claims.
 | --- | --- | --- | --- |
 | Piper Alan Low | ~2.1 s first audio cold; ~0.33 s warm | model-dependent | Best tested continuity |
 | Kitten Nano INT8 | ~2.95 s generation for ~3.70 s audio, RTF ~0.80 | ~45 MB installed in the tested package | Realtime-capable |
-| Pocket INT8, 2 steps, 2 threads | cold RTF ~0.99; sustained warm RTF ~0.47–0.48 | 641–659 MB test-process PSS | Default for this device class; model throughput is sufficient, but client request boundaries may remain audible |
-| Kokoro v1.1 FP32, 4 threads | cold RTF ~1.84; sustained warm RTF ~1.06–1.13 | 663–692 MB test-process PSS | Slightly slower than realtime after warm-up; not suitable for seamless document reading on this phone |
+| Inflect Nano v2 FP32 | repeated tuned RTF 0.176–0.250; 2.16–3.08 s median first PCM | 227–338 MB peak PSS | One thread selected; comfortably faster than realtime |
+| Pocket INT8, 2 steps | RTF 0.569/0.584/1.021/1.152 at 1/2/3/4 threads | 642 MB peak PSS | One thread selected; wider phone parallelism regresses sharply |
+| Kokoro v1.0 FP32 | RTF 1.239/1.116/1.107/1.320 at 1/2/3/4 threads | 923 MB peak PSS | Two threads selected within the 5% band; still marginal for continuous reading |
 | MOSS INT8 | sustained RTF ~1.41–1.47 | test artifact removed | Rejected for this release |
 
 Measurements use short fixed passages after a clean install and again with a

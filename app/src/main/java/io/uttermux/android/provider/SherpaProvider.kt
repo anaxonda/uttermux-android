@@ -23,7 +23,8 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
     private data class Spec(val voice:VoiceRecord,val model:String,val speaker:Int,val referenceFile:String="")
     private val pocketProfiles=PocketProfileStore(context)
     private val specs=mutableListOf(
-        Spec(VoiceRecord("sherpa/vits-inflect-en-nano-v2/default@en-US","Inflect Nano",Locale.US,ProviderIds.SHERPA,"VITS",setOf("en-US"),false),"vits-inflect-en-nano-v2",0),
+        Spec(VoiceRecord("sherpa/vits-inflect-en-nano-v2/default@en-US","Inflect Nano",Locale.US,ProviderIds.SHERPA,"Inflect Nano v2",setOf("en-US"),false,
+            "17 MB · Apache-2.0",downloadId="vits-inflect-en-nano-v2",approxSizeMb=17,license="Apache-2.0",quantization="FP32",estimatedRamMb=80,performanceClass="fast",library="Inflect / VITS",modelVersion="Nano v2"),"vits-inflect-en-nano-v2",0),
         Spec(VoiceRecord("sherpa/vits-inflect-en-micro-v2/default@en-US","Inflect Micro",Locale.US,ProviderIds.SHERPA,"VITS",setOf("en-US"),false,
             "43 MB · Apache-2.0","","vits-inflect-en-micro-v2",true,approxSizeMb=43,license="Apache-2.0"),"vits-inflect-en-micro-v2",0),
         Spec(VoiceRecord("sherpa/matcha-icefall-en_US-ljspeech/ljspeech@en-US","LJSpeech · Matcha",Locale.US,ProviderIds.SHERPA,"Matcha",setOf("en-US"),false,
@@ -224,7 +225,7 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath
         val coreCount=Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         val automaticThreads=minOf(coreCount,if(model.engine=="pocket")2 else 4)
-        val config=OfflineTtsModelConfig(numThreads=settings.tunedThreads(model.id,manager.artifactFingerprint(model.id)).takeIf{it>0}?:settings.engineThreads.takeIf{it>0}?:automaticThreads)
+        val config=OfflineTtsModelConfig(numThreads=settings.effectiveThreads(model.id,manager.artifactFingerprint(model.id)).takeIf{it>0}?:settings.engineThreads.takeIf{it>0}?:automaticThreads)
         when(model.engine){
             "vits"->config.vits=OfflineTtsVitsModelConfig(model=path(model.model),tokens=path(model.tokens),dataDir=path(model.dataDir))
             "matcha"->config.matcha=OfflineTtsMatchaModelConfig(acousticModel=path(model.model),vocoder=path(model.secondaryFile),tokens=path(model.tokens),dataDir=path(model.dataDir),lexicon=path(model.lexicon))
