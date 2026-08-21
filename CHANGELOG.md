@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.4.0-beta.1 - Unreleased
+## 0.4.0-beta.2 - 2026-08-21
+
+- Fixed paused local streams starving subsequent voices and previews.
+- Fixed strict Android TTS terminal-callback handling and KOReader voice availability.
+- Added per-model tuning, benchmark feedback, adaptive icons, and preview progress.
+- Added model-input contraction normalization for VITS and Pocket artifacts.
+- Clarified incomplete voice downloads and provider credential saving.
+- Documented the required KOReader pause/resume and UTF-8 compatibility patch.
+
+## 0.4.0-beta.1 - 2026-08-21
 
 First public Android beta.
 
