@@ -41,7 +41,7 @@ jobs:
         run: ./gradlew testDebugUnitTest lintRelease assembleRelease
       - name: Verify and name artifact
         run: |
-          apksigner verify --verbose app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
           cp app/build/outputs/apk/release/app-release.apk "uttermux-android-${GITHUB_REF_NAME#v}-arm64.apk"
           ./scripts/audit-apk.sh "uttermux-android-${GITHUB_REF_NAME#v}-arm64.apk"
           sha256sum "uttermux-android-${GITHUB_REF_NAME#v}-arm64.apk" > SHA256SUMS
