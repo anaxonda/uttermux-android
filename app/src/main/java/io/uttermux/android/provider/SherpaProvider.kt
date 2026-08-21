@@ -126,8 +126,15 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
             "User-created local voice profile",downloadId=model,approxSizeMb=176,license="Private reference recording",quantization="INT8",estimatedRamMb=420,performanceClass="balanced",capabilities=setOf("voice-cloning"),library="Pocket",modelVersion="2026-01 INT8"),model,0,profile.referenceFile)
     }
     override val voices get()=allSpecs().map{it.voice}
-    override val availableVoices get()=manager.installedIds().let{installed->allSpecs().filter{it.model in installed}.map{it.voice}}
-    override fun isAvailable(voice:VoiceRecord)=allSpecs().firstOrNull{it.voice.id==voice.id}?.let{runCatching{manager.installed(it.model)}.getOrDefault(false)}==true
+    private fun referenceAvailable(spec:Spec):Boolean {
+        if(spec.referenceFile.isBlank())return true
+        val requested=File(spec.referenceFile)
+        return (if(requested.isAbsolute)requested else File(File(manager.root,spec.model),spec.referenceFile)).isFile
+    }
+    override val availableVoices get()=manager.installedIds().let{installed->allSpecs().filter{it.model in installed&&referenceAvailable(it)}.map{it.voice}}
+    override fun isAvailable(voice:VoiceRecord)=allSpecs().firstOrNull{it.voice.id==voice.id}?.let{spec->
+        runCatching{manager.installed(spec.model)&&referenceAvailable(spec)}.getOrDefault(false)
+    }==true
     private val runtimeLock=Any()
     private val warmedReferences=mutableSetOf<String>()
     private val engines=object:LinkedHashMap<String,OfflineTts>(3,.75f,true){

@@ -87,7 +87,7 @@ class UtterMuxTtsService : TextToSpeechService() {
     override fun onStop(){active.getAndSet(null)?.set(true)}
 
     override fun onSynthesizeText(request:SynthesisRequest,callback:SynthesisCallback) {
-        val signal=AtomicBoolean();active.set(signal)
+        val signal=AtomicBoolean();active.getAndSet(signal)?.set(true)
         var callbackStarted=false;var errorSent=false
         fun errorOnce(code:Int){if(!errorSent){errorSent=true;callback.error(code)}}
         val locale=requestedTag(request.language,request.country)
@@ -141,7 +141,9 @@ class UtterMuxTtsService : TextToSpeechService() {
             Diagnostics.record(diagnostic,"error",error.message.orEmpty());if(!signal.get())errorOnce(errorCode(error))
         } finally {
             Diagnostics.record(diagnostic,"complete","${(System.nanoTime()-began)/1_000_000}ms frames=$emittedFrames cancelled=${signal.get()}")
-            if(callbackStarted||errorSent)callback.done() else if(!signal.get())callback.done()
+            // error() and done() are both terminal Android TTS callbacks. Never
+            // send both for one request; strict clients reject that lifecycle.
+            if(!errorSent)callback.done()
             active.compareAndSet(signal,null);VoiceActivity.idle()
         }
     }

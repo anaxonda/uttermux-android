@@ -164,7 +164,7 @@ private data class Suggestion(val value:String,val label:String)
     var repairNeeded by remember(voice.id,installed){mutableStateOf(installed&&localId.isNotBlank()&&runCatching{app.models.needsRepair(localId)}.getOrDefault(false))}
     var missingAssets by remember(voice.id,installed){mutableStateOf(if(installed&&localId.isNotBlank())runCatching{app.models.missingAssets(localId).size}.getOrDefault(0)else 0)}
     var confirmPaid by remember{mutableStateOf(false)}
-    val ready=if(localId.isNotBlank())installed else catalogReady;val canRemotePreview=voice.previewUrl.isNotBlank();val canPreview=ready||canRemotePreview
+    val ready=if(localId.isNotBlank())installed&&app.router.isAvailable(voice) else catalogReady;val canRemotePreview=voice.previewUrl.isNotBlank();val canPreview=ready||canRemotePreview
     val preview by PreviewController.state.collectAsState();val previewActive=preview.voiceId==voice.id&&preview.phase in setOf("loading","playing")
     val doPreview:()->Unit={scope.launch{onStatus("Previewing ${voice.name}…");runCatching{
         PreviewController.play(voice.id){cancelled->if(!ready&&canRemotePreview)CompressedAudioDecoder.decode(app,HttpAudio.get(voice.previewUrl),voice.previewUrl.substringAfterLast('.',"audio"))else app.router.synthesizeExact(voice.id,previewText(voice.locale.language),voice.locale.toLanguageTag(),1f,cancelled)}
