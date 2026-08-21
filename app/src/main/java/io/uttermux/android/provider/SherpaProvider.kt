@@ -212,14 +212,15 @@ class SherpaProvider(private val context:Context, val manager:ModelManager=Model
         // Pocket's native decoder can now emit PCM before latent generation
         // finishes. Keep a smaller startup window for the fast preset and a
         // little more reserve for the slower, higher-quality presets.
-        val chunkSize=when(settings.pocketNumSteps){
+        val pocketSteps=settings.effectivePocketSteps(spec.model)
+        val chunkSize=when(pocketSteps){
             1->1
             2->2
             3->4
             4->10
             else->15
         }
-        return GenerationConfig(speed=speed,sid=spec.speaker,referenceAudio=reference.samples,referenceSampleRate=reference.sampleRate,numSteps=settings.pocketNumSteps,extra=mapOf("chunk_size" to chunkSize.toString()))
+        return GenerationConfig(speed=speed,sid=spec.speaker,referenceAudio=reference.samples,referenceSampleRate=reference.sampleRate,numSteps=pocketSteps,extra=mapOf("chunk_size" to chunkSize.toString()))
     }
     private fun create(model:LocalModel,root:File,language:String):OfflineTts {
         fun path(name:String)=if(name.isBlank())"" else File(root,name).absolutePath

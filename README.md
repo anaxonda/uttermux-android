@@ -270,9 +270,12 @@ thread count within 5% of the fastest result. Nothing is applied until the user
 confirms.
 
 Applied profiles are bound to a combined catalog-artifact and app-runtime
-fingerprint, and are ignored after either changes. Per-artifact tuning takes precedence over a global
-manual thread value, which takes precedence over Automatic. Pocket refinement
-and other quality controls are never changed by the benchmark.
+fingerprint, and are ignored after either changes. **Test & tune → Model
+settings** can override threads and, for Pocket, refinement steps for one exact
+downloaded artifact. Precedence is: an active benchmark run, a manual model
+override, a valid tuned profile, the global default, then Automatic. Playback
+buffering and the loaded-model cache remain global. Pocket refinement and other
+quality controls are never changed by the benchmark.
 
 Variants from one family appear together with their version, quantization,
 storage, memory, and last result. Preview each installed variant with identical

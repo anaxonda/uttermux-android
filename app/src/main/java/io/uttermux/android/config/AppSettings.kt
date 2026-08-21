@@ -32,12 +32,25 @@ class AppSettings(context: Context) {
         set(value){prefs.edit().putInt("engine_threads",value.takeIf{it in 1..16}?:0).apply()}
     fun tuningFingerprint(artifactId:String)=prefs.getString("tuning.$artifactId.fingerprint","").orEmpty()
     fun tunedThreads(artifactId:String,fingerprint:String=""):Int=if(fingerprint.isNotBlank()&&tuningFingerprint(artifactId)!=fingerprint)0 else prefs.getInt("tuning.$artifactId.threads",0)
-    fun effectiveThreads(artifactId:String,fingerprint:String="")=benchmarkThreads[artifactId]?:tunedThreads(artifactId,fingerprint)
+    fun modelThreads(artifactId:String)=prefs.getInt("model_override.$artifactId.threads",0)
+    fun setModelThreads(artifactId:String,value:Int){val edit=prefs.edit();if(value in 1..16)edit.putInt("model_override.$artifactId.threads",value)else edit.remove("model_override.$artifactId.threads");edit.apply()}
+    fun modelPocketSteps(artifactId:String)=prefs.getInt("model_override.$artifactId.pocket_steps",0)
+    fun setModelPocketSteps(artifactId:String,value:Int){val edit=prefs.edit();if(value in 1..5)edit.putInt("model_override.$artifactId.pocket_steps",value)else edit.remove("model_override.$artifactId.pocket_steps");edit.apply()}
+    fun effectivePocketSteps(artifactId:String)=modelPocketSteps(artifactId).takeIf{it>0}?:pocketNumSteps
+    fun effectiveThreads(artifactId:String,fingerprint:String="")=benchmarkThreads[artifactId]?:modelThreads(artifactId).takeIf{it>0}?:tunedThreads(artifactId,fingerprint)
+    fun threadSource(artifactId:String,fingerprint:String="")=when{
+        benchmarkThreads.containsKey(artifactId)->"Benchmark run"
+        modelThreads(artifactId)>0->"Model override"
+        tunedThreads(artifactId,fingerprint)>0->"Tuned"
+        engineThreads>0->"Global default"
+        else->"Automatic"
+    }
     fun setBenchmarkThreads(artifactId:String,value:Int){if(value in 1..16)benchmarkThreads[artifactId]=value else benchmarkThreads.remove(artifactId)}
     fun setTunedThreads(artifactId:String,value:Int,fingerprint:String=""){
         val edit=prefs.edit();val key="tuning.$artifactId.threads";val fingerprintKey="tuning.$artifactId.fingerprint"
         if(value in 1..16){edit.putInt(key,value);edit.putString(fingerprintKey,fingerprint)}else{edit.remove(key);edit.remove(fingerprintKey)};edit.apply()
     }
+    fun resetModelOverrides(artifactId:String){prefs.edit().remove("model_override.$artifactId.threads").remove("model_override.$artifactId.pocket_steps").apply()}
     var paidPreviewConfirmed:Boolean
         get()=prefs.getBoolean("paid_preview_confirmed",false)
         set(value){prefs.edit().putBoolean("paid_preview_confirmed",value).apply()}
