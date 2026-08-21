@@ -90,8 +90,8 @@ means a reference recording must be configured before a system voice exists.
 | `kitten-nano-en-v0_8-int8` | English; 8 | No | 31 MiB | INT8 | 120 MiB | RTF ~0.80 | [KittenTTS](https://github.com/KittenML/KittenTTS) |
 | `matcha-icefall-en_US-ljspeech` | English; 1 | No | 77 MiB | FP32 | 260 MiB | Runnable; sustained reader test pending | [Matcha-TTS](https://github.com/shivammehta25/Matcha-TTS) |
 | `sherpa-onnx-supertonic-3-tts-int8-2026-05-11` | 31 languages; 10 styles | No | 129 MiB | INT8 | 350 MiB | Runnable; sustained reader test pending | [Supertonic](https://github.com/supertone-inc/supertonic) |
-| `sherpa-onnx-pocket-tts-int8-2026-01-26` | English; 10 references + profiles | Yes | 176 MiB | INT8 | 420 MiB | Warm first PCM ~243–262 ms; client boundaries audible | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
-| `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | RTF ~1.91; not continuous-reader speed | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
+| `sherpa-onnx-pocket-tts-int8-2026-01-26` | English; 10 references + profiles | Yes | 176 MiB | INT8 | 420 MiB | Two-step sustained warm RTF ~0.47–0.48; client boundaries may remain audible | [Pocket TTS](https://github.com/kyutai-labs/pocket-tts) |
+| `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | Same heavy family as measured v1.1; not accepted for continuous reading on the reference phone | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
 | `kokoro-multi-lang-v1_1` | English/Chinese; 103 speakers | No | 348 MiB | FP32 | 700 MiB | Runnable; same heavy tier, not separately timed | [Kokoro v1.1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html) |
 | `qwen3-tts-0.6b-base-q4km` | 10 languages; user profiles | Yes | 843 MiB | Q4_K_M GGUF | ~1.54 GiB measured PSS | Device preview only: a bounded 128-token clone run produced no first audio after 4 min 19 s on the reference phone | [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) / [qwen3-tts.cpp](https://github.com/Danmoreng/qwen3-tts.cpp) |
 
@@ -201,9 +201,9 @@ waits for a complete passage before hearing audio.
 Only models in **Models available in the Android app** appear in the voice
 catalog. Entries under **Evaluated models not included** are documentation only.
 Local model downloads require an explicit install action.
-Pocket reuses one runtime/model with cached reference WAV files. Its 3/4/5-step
-quality selector trades generation latency for refinement; three steps is the
-measured low-latency default. Kokoro uses the supported FP32 graph: the available
+Pocket reuses one runtime/model with cached reference WAV files. Its one-to-five-step
+quality selector trades generation latency for refinement; two steps and two
+threads are the measured defaults on the reference phone. Kokoro uses the supported FP32 graph: the available
 INT8 export is intentionally hidden because current ARM reports include rail-pinned
 audio, tones, and performance regressions. MOSS and ZipVoice are intentionally
 excluded from this release. MOSS did not meet sustained document-reading latency;
@@ -277,9 +277,7 @@ requests, cancellation, pause/resume, and thermal observation; a good first-PCM
 number alone is not sufficient.
 
 Opt-in large-model tests also download, checksum, initialize, synthesize, and
-exercise repeated provider requests. On that SM-G970F, progressive warm Pocket
-at three steps produced first PCM in about 243–262 ms with no callback deficit
-in repeated short sections. Because readers
+exercise repeated provider requests. Because readers
 such as Librera submit the next section only after the previous Android TTS
 request completes, that per-request generation time still becomes an audible
 section gap; UtterMux cannot pre-generate text the client has not supplied.
@@ -314,6 +312,14 @@ families require a maintained arm64 runtime plus measured cold/warm latency,
 sustained RTF, peak PSS, cancellation, and multi-client tests before they can
 enter the runnable catalog. A hardware label will remain advisory and will not
 download or hide models.
+
+## Release channels
+
+GitHub tag builds produce a signed arm64 APK after unit, lint, provenance, and
+payload audits. The repository currently carries checksum-pinned development
+builds of sherpa-onnx JNI and ONNX Runtime. F-Droid submission remains blocked
+until its recipe rebuilds both native libraries from pinned source instead of
+packaging those checked-in binaries.
 
 ## Related work
 
