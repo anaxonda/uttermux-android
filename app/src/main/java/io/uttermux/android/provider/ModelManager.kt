@@ -16,7 +16,7 @@ data class LocalModel(val id:String,val engine:String,val url:String,val sha256:
 
 class ModelManager(private val context: Context) {
     private val modelsById = linkedMapOf<String,LocalModel>()
-    val models: List<LocalModel> get() = synchronized(modelsById) { modelsById.values.filterNot{it.engine=="moss"} }
+    val models: List<LocalModel> get() = synchronized(modelsById) { modelsById.values.toList() }
     init { listOf(
         LocalModel("kokoro-multi-lang-v1_0","kokoro","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2","c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046","model.onnx",voices="voices.bin",lexicon="lexicon-us-en.txt",title="Kokoro multilingual 82M",family="Kokoro",downloadSizeMb=350,estimatedRamMb=650,quantization="FP32",performanceClass="heavy",languages=setOf("en-US","en-GB","es-ES","fr-FR","hi-IN","it-IT","ja-JP","pt-BR","zh-CN"),license="Apache-2.0",sourceUrl="https://k2-fsa.github.io/sherpa/onnx/tts/all/"),
         LocalModel("kokoro-multi-lang-v1_1","kokoro","https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_1.tar.bz2","a3f4c73d043860e3fd2e5b06f36795eb81de0fc8e8de6df703245edddd87dbad","model.onnx",voices="voices.bin",lexicon="lexicon-us-en.txt",
@@ -68,7 +68,7 @@ class ModelManager(private val context: Context) {
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_step.onnx","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_step.onnx","9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"),
             RemoteAsset("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data","https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main/moss_audio_tokenizer_decode_shared.data","e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"),
         )),
-    ).forEach(::register) }
+    ).filterNot { it.engine == "moss" }.forEach(::register) }
     val root = File(context.filesDir,"models").apply { mkdirs() }
     fun register(model:LocalModel) { synchronized(modelsById) { modelsById[model.id] = model } }
     fun model(id:String)=synchronized(modelsById) { modelsById[id] ?: error("Unknown model $id") }

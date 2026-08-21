@@ -55,10 +55,30 @@ excluded from backup and device transfer.
 Filters and list position survive tab changes and rotation but intentionally
 start clean after a complete process relaunch.
 
-## Runnable local catalog
+## Models available in the Android app
 
-No model is bundled. Sizes and RAM are approximate and can change when upstream
-artifacts change; the catalog is the download source of truth.
+Every row below appears in the Android voice catalog and has an implemented
+download and synthesis path. No model is bundled. Sizes and RAM are catalog
+metadata and can change when upstream artifacts change; they are not universal
+hardware requirements.
+
+### Cross-platform local support
+
+“Yes” means the released app exposes an install and synthesis path. “Profile”
+means a reference recording must be configured before a system voice exists.
+
+| Family | Android | Linux | Current boundary |
+| --- | --- | --- | --- |
+| Piper/VITS | Yes; dynamic upstream catalog | Yes; Lessac medium in the built-in catalog | Fixed voices |
+| Inflect Nano/Micro | Nano and Micro | Nano | Fixed English voices |
+| Kitten | FP16 v0.1 and INT8 v0.8 | FP16 v0.1 and INT8 v0.8 | Fixed English voices |
+| Matcha | Yes | Yes | LJSpeech + Vocos artifact |
+| Supertonic 3 | INT8 | INT8 | Multilingual styles |
+| Pocket | Yes; presets and profiles | Yes; presets and profiles | Reference-conditioned cloning |
+| Kokoro | v1.0 and v1.1 FP32 | v1.0 FP32 | INT8 and FP8 are not included |
+| ZipVoice Distill | No | Profile; INT8 | Linux requires reference audio and transcript |
+| MOSS-TTS-Nano | No | Companion adapter; FP32 | Android evaluation failed sustained-reader acceptance |
+| Qwen3-TTS 0.6B | No | Companion adapter; CustomVoice | Android runtime is not integrated |
 
 | Concrete artifact | Languages / voices | Clone | Download | Precision | Est. RAM | 2019 SM-G970F result | Upstream |
 | --- | --- | ---: | ---: | --- | ---: | --- | --- |
@@ -73,16 +93,20 @@ artifacts change; the catalog is the download source of truth.
 | `kokoro-multi-lang-v1_0` | English/Chinese runtime; 53 speakers | No | 350 MiB | FP32 | 650 MiB | RTF ~1.91; not continuous-reader speed | [Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) |
 | `kokoro-multi-lang-v1_1` | English/Chinese; 103 speakers | No | 348 MiB | FP32 | 700 MiB | Runnable; same heavy tier, not separately timed | [Kokoro v1.1](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html) |
 
-Kokoro v1.1 INT8 exists upstream but is not exposed because the tested
-Android/ARM path produced
-intermittent rail-pinned audio and regressions; the FP32 graph is the supported
-variant. FP8 is not supported by this CPU runtime. A model is not promoted
-merely because its runtime can initialize.
+Kokoro v1.1 INT8 exists upstream but is not included because the tested
+Android/ARM path produced intermittent rail-pinned audio and regressions.
+UtterMux has no tested Kokoro FP8 artifact or FP8 Android runtime configuration.
+This does not imply that FP8 is impossible on other devices or execution
+providers. A model variant enters the app only after the artifact and runtime
+pass synthesis and reader tests together.
 
-## Candidate and rejected local models
+## Evaluated models not included in the Android app
 
-These entries are documentation, not dead rows in the app. “Candidate” means an
-arm64 implementation still has to pass exact system-TTS ranges, cancellation,
+The models in this section are **not supported by this release**: they do not
+appear in search, cannot be downloaded by the app, and cannot be selected as an
+Android system voice. The table records why they were evaluated and what would
+be required before adding them. Passing initialization alone is insufficient;
+an arm64 implementation must pass exact system-TTS ranges, cancellation, peak
 memory, sustained RTF, and multi-client reader tests.
 
 | Model | Main value | Available deployment path | Evaluation hardware | UtterMux status |
@@ -158,8 +182,9 @@ waits for a complete passage before hearing audio.
 
 ## Model policy
 
-Only runnable voices appear in the voice catalog; research and compatibility
-notes are documentation, not dead UI rows. Local model downloads are explicit.
+Only models in **Models available in the Android app** appear in the voice
+catalog. Entries under **Evaluated models not included** are documentation only.
+Local model downloads require an explicit install action.
 Pocket reuses one runtime/model with cached reference WAV files. Its 3/4/5-step
 quality selector trades generation latency for refinement; three steps is the
 measured low-latency default. Kokoro uses the supported FP32 graph: the available
