@@ -151,7 +151,12 @@ Select UtterMux under Android's text-to-speech settings, then open UtterMux to
 install a local voice or configure a cloud provider. Do not use Gradle's generic
 `connectedDebugAndroidTest` task against a phone whose configured app data must
 be preserved; install the test APK and invoke selected instrumentation tests
-directly instead.
+directly instead. The data-preserving wrapper performs that sequence:
+
+```sh
+scripts/device-test.sh
+scripts/device-test.sh io.uttermux.android.PiperPreviewTest
+```
 
 UtterMux deliberately ships with **no voice or model in the APK**. The first-run
 catalog therefore has no ready offline voice until one is downloaded. This keeps
