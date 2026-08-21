@@ -46,23 +46,24 @@ class MainActivity:ComponentActivity(){
     }
 }
 
-private enum class Page(val label:String){VOICES("Voices"),CREATE("Create"),TUNE("Tune"),SETTINGS("Settings")}
+private enum class Page(val label:String){VOICES("Voices"),CREATE("Create"),TUNE("Test"),SETTINGS("Settings")}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun UtterMuxManager(theme:String,onTheme:(String)->Unit){
-    val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by rememberSaveable{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")};var voiceCatalog by remember{mutableStateOf<VoiceCatalogUi?>(null)}
+    val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by rememberSaveable{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")};var voiceCatalog by remember{mutableStateOf<VoiceCatalogUi?>(null)};var testArtifact by rememberSaveable{mutableStateOf("")}
+    val previewState by PreviewController.state.collectAsState();val previewBusy=previewState.phase in setOf("loading","playing")
     val filters=rememberVoiceFilterState();val voiceListState=rememberLazyListState()
     LaunchedEffect(revision){voiceCatalog=withContext(Dispatchers.Default){buildVoiceCatalog(app)}}
     fun refresh(){scope.launch{status="Refreshing catalogs…";val errors=withContext(Dispatchers.IO){app.refreshCatalogs()};revision++;status=if(errors.isEmpty())"Catalogs refreshed" else errors.joinToString()}}
-    Scaffold(topBar={TopAppBar(title={Column{Text("UtterMux");Text(status,style=MaterialTheme.typography.labelSmall)}})},bottomBar={NavigationBar{
+    Scaffold(topBar={TopAppBar(title={Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){if(previewState.phase=="loading")CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp);Column{Text("UtterMux");Text(if(previewBusy)previewState.message else status,style=MaterialTheme.typography.labelSmall)}}})},bottomBar={NavigationBar{
         NavigationBarItem(selected=page==Page.VOICES,onClick={page=Page.VOICES},icon={Text("◉")},label={Text("Voices")})
         NavigationBarItem(selected=page==Page.CREATE,onClick={page=Page.CREATE},icon={Text("＋")},label={Text("Create")})
-        NavigationBarItem(selected=page==Page.TUNE,onClick={page=Page.TUNE},icon={Text("⌁")},label={Text("Tune")})
+        NavigationBarItem(selected=page==Page.TUNE,onClick={testArtifact="";page=Page.TUNE},icon={Text("⌁")},label={Text("Test")})
         NavigationBarItem(selected=page==Page.SETTINGS,onClick={page=Page.SETTINGS},icon={Text("⚙")},label={Text("Settings")})
     }}){padding->Box(Modifier.padding(padding)){when(page){
-        Page.VOICES->VoicesPage(revision,voiceCatalog,filters,voiceListState,{revision++},{status=it})
+        Page.VOICES->VoicesPage(revision,voiceCatalog,filters,voiceListState,{revision++},{artifact->testArtifact=artifact;page=Page.TUNE},{status=it})
         Page.CREATE->CreateVoicePage(revision,{revision++},{status=it})
-        Page.TUNE->BenchmarkPage{status=it}
+        Page.TUNE->BenchmarkPage(testArtifact){status=it}
         Page.SETTINGS->ModernSettingsPage(revision,theme,onTheme,{refresh()},{revision++},{status=it})
     }}}
 }
@@ -95,7 +96,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
     return VoiceCatalogUi(entries,voices,languages,libraries,models,accents,performances,genders,capabilities,app.router.effectiveDefault())
 }
 
-@Composable private fun VoicesPage(revision:Int,snapshot:VoiceCatalogUi?,filters:VoiceFilterState,listState:LazyListState,onChanged:()->Unit,onStatus:(String)->Unit){
+@Composable private fun VoicesPage(revision:Int,snapshot:VoiceCatalogUi?,filters:VoiceFilterState,listState:LazyListState,onChanged:()->Unit,onTest:(String)->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance
     var defaultVoice by rememberSaveable{mutableStateOf(app.settings.defaultVoice)};var shown by remember{mutableStateOf<List<VoiceSearchEntry>>(emptyList())}
     LaunchedEffect(revision){defaultVoice=app.settings.defaultVoice}
@@ -131,7 +132,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
         item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Box(Modifier.weight(1f)){Selector("Capability",filters.capability,listOf("all")+snapshot.capabilities){filters.capability=it}};Box(Modifier.weight(1f)){Selector("Cost",filters.cost,listOf("all","free","metered","subscription")){filters.cost=it}}}}
         item{Selector("Sort",filters.sort,listOf("name","library","smallest","fastest")){filters.sort=it}}
         item{Text("${shown.size} of ${snapshot.entries.size} voices",style=MaterialTheme.typography.bodySmall)}
-        items(shown,key={it.voice.id}){entry->val voice=entry.voice;VoiceCard(voice,"${entry.library} · ${entry.model}",entry.ready,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},{onStatus(it)})}
+        items(shown,key={it.voice.id}){entry->val voice=entry.voice;VoiceCard(voice,"${entry.library} · ${entry.model}",entry.ready,voice.id==(effectiveDefault?.id?:defaultVoice),{app.settings.defaultVoice=voice.id;defaultVoice=voice.id;Thread{app.router.warm(voice.id)}.start();onStatus("Default: ${voice.name}")},{onChanged()},onTest,{onStatus(it)})}
     }
 }
 
@@ -156,7 +157,7 @@ private data class Suggestion(val value:String,val label:String)
     }
 }
 
-@Composable private fun VoiceCard(voice:VoiceRecord,service:String,catalogReady:Boolean,selected:Boolean,onDefault:()->Unit,onChanged:()->Unit,onStatus:(String)->Unit){
+@Composable private fun VoiceCard(voice:VoiceRecord,service:String,catalogReady:Boolean,selected:Boolean,onDefault:()->Unit,onChanged:()->Unit,onTest:(String)->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance;val context=LocalContext.current;val scope=rememberCoroutineScope();val localId=voice.downloadId.ifBlank{voice.takeIf{it.provider==ProviderIds.SHERPA}?.id?.split('/')?.getOrNull(1).orEmpty()}
     val advice=remember(voice.id,voice.estimatedRamMb,voice.performanceClass,voice.networkRequired){HardwareAdvisor.recommend(context,voice)}
     var installed by remember(voice.id){mutableStateOf(localId.isBlank()&&app.router.isAvailable(voice)||localId.isNotBlank()&&runCatching{app.models.installed(localId)}.getOrDefault(false))}
@@ -175,8 +176,12 @@ private data class Suggestion(val value:String,val label:String)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
             AssistChip(onClick={},label={Text(if(ready)"Ready" else if(voice.downloadable&&localId.isNotBlank())"Downloadable" else "Setup required")})
             TextButton(enabled=canPreview||previewActive,onClick={if(previewActive){PreviewController.stop();onStatus("Preview stopped")}else if(voice.networkRequired&&voice.provider!=ProviderIds.EDGE&&!app.settings.paidPreviewConfirmed)confirmPaid=true else doPreview()}){Text(if(previewActive)"Stop" else if(voice.networkRequired&&voice.provider!=ProviderIds.EDGE)"Preview · may cost" else if(canPreview)"Preview" else "Install to preview")}
+            if(ready&&!voice.networkRequired&&localId.isNotBlank())TextButton(onClick={onTest(localId)}){Text("Test model")}
         }
-        if(preview.voiceId==voice.id&&preview.phase!="idle")Text(preview.message,style=MaterialTheme.typography.labelSmall)
+        if(preview.voiceId==voice.id&&preview.phase!="idle")Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+            if(preview.phase=="loading")CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp)
+            Text(preview.message,style=MaterialTheme.typography.labelSmall)
+        }
         if(localId.isNotBlank())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
             if(!installed&&voice.downloadable)Button(onClick={scope.launch{onStatus("Downloading $localId…");runCatching{withContext(Dispatchers.IO){app.models.install(localId)}}.onSuccess{installed=true;app.notifyVoiceDataChanged();onChanged();onStatus("Installed ${voice.name}")}.onFailure{onStatus("Install failed: ${it.message}")}}}){Text("Download")}
             if(installed&&repairNeeded)Button(onClick={scope.launch{onStatus("Updating $localId…");runCatching{withContext(Dispatchers.IO){app.models.repair(localId)}}.onSuccess{repairNeeded=false;app.notifyVoiceDataChanged();onChanged();onStatus("Updated ${voice.model}")}.onFailure{onStatus("Update failed: ${it.message}")}}}){Text("Update model")}

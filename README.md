@@ -49,6 +49,9 @@ excluded from backup and device transfer.
 - **Create** records or imports a permitted reference sample for Pocket or the
   Qwen device-preview runtime, previews source and generated audio, and manages
   engine-specific private profiles.
+- **Test** previews installed local voices and benchmarks each exact model
+  artifact on the current device. An installed voice card's **Test model**
+  button opens this page with that artifact first.
 - **Settings** contains general integration, individually expandable online
   service cards, language routing, downloaded-model storage, explained advanced
   playback controls, diagnostics, and privacy/version information.
@@ -251,7 +254,10 @@ model for APIs implementing OpenAI's speech endpoint.
 
 ## Device tuning and model variants
 
-The **Tune** tab benchmarks installed local artifacts only. Its standard sweep
+The **Test** tab benchmarks installed local artifacts only. Preview first to
+check pronunciation and audio quality; the voice row and app bar show whether
+the preview is still generating or is already playing. Then press **Benchmark**
+to run the measured sweep. Its standard sweep
 tests one through four threads; Android's logical-core count does not distinguish
 performance cores from efficiency cores, and wider heavy-model sweeps can regress
 severely. Each version and
