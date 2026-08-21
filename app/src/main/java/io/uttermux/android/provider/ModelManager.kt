@@ -80,7 +80,8 @@ class ModelManager(private val context: Context) {
     fun model(id:String)=synchronized(modelsById) { modelsById[id] ?: error("Unknown model $id") }
     fun artifactFingerprint(id:String):String {val model=synchronized(modelsById){modelsById[id]};val material=((model?.let{listOf(it.sha256,it.secondarySha256)+it.assets.map{asset->asset.sha256}}?:listOf(id))+io.uttermux.android.BuildConfig.VERSION_NAME).filter(String::isNotBlank).joinToString(":");return MessageDigest.getInstance("SHA-256").digest(material.toByteArray()).joinToString(""){"%02x".format(it)}}
     fun installed(id:String)=File(root,id).resolve(model(id).model).isFile
-    fun needsRepair(id:String):Boolean {val model=model(id);return installed(id)&&model.assets.any{!File(File(root,id),it.file).isFile}}
+    fun missingAssets(id:String):List<String> {val model=model(id);return if(!installed(id))emptyList() else model.assets.map{it.file}.filter{!File(File(root,id),it).isFile}}
+    fun needsRepair(id:String):Boolean = missingAssets(id).isNotEmpty()
     fun repair(id:String,progress:(String)->Unit={},cancelled:()->Boolean={false}){
         val model=model(id);require(installed(id)){"Install $id first"};val destination=File(root,id).canonicalFile
         model.assets.filter{!File(destination,it.file).isFile}.forEach{asset->

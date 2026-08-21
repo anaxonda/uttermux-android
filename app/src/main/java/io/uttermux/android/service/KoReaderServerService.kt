@@ -3,6 +3,7 @@ package io.uttermux.android.service
 import android.app.*
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import io.uttermux.android.MainActivity
 import io.uttermux.android.R
 import io.uttermux.android.UtterMuxApp
@@ -64,9 +65,9 @@ class KoReaderServerService:Service(){
                     }
                     respond(output,200,handle)
                 }
-                method=="POST"&&path in setOf("/play","/resume")->{val clip=fresh(json.getString("handle"));startOrResume(clip);respond(output,200,"")}
-                method=="POST"&&path=="/pause"->{pause(find(json.getString("handle")));respond(output,200,"")}
-                method=="POST"&&path=="/stop"->{findOrNull(json.optString("handle"))?.let(::cancel);respond(output,200,"")}
+                method=="POST"&&path in setOf("/play","/resume")->{val clip=fresh(json.getString("handle"));Log.d(TAG,"$path handle=${clip.handle} state=${clip.state}");activate(clip);startOrResume(clip);respond(output,200,"")}
+                method=="POST"&&path=="/pause"->{val clip=find(json.getString("handle"));Log.d(TAG,"pause handle=${clip.handle} state=${clip.state}");pause(clip);respond(output,200,"")}
+                method=="POST"&&path=="/stop"->{findOrNull(json.optString("handle"))?.let{Log.d(TAG,"stop handle=${it.handle} state=${it.state}");cancel(it)};respond(output,200,"")}
                 method=="POST"&&path=="/remaining"->{
                     val clip=find(json.getString("handle"));val remaining=if(clip.state in setOf(ClipState.FINISHED,ClipState.STOPPED,ClipState.ERROR))0.0 else clip.queuedSeconds.coerceAtLeast(.02)
                     respond(output,200,JSONObject().put("started",clip.state !in setOf(ClipState.PREPARING,ClipState.READY)).put("remaining",remaining)
@@ -88,6 +89,16 @@ class KoReaderServerService:Service(){
         cache.values.filter{it.routeRevision!=revision}.forEach(::cancel)
         val route=app.router.prepare("uttermux:auto",existing.text,existing.language)
         create(handle,existing.text,existing.speed,existing.language,revision,route).also{cache[handle]=it}
+    }
+    /**
+     * Direct playback has one audio owner. A paused neural stream may otherwise
+     * fill its bounded queue while retaining the provider's runtime lock. The
+     * next local model would then wait for that lock before it can emit the
+     * first frame, so Playback never gets far enough to stop the old owner.
+     */
+    private fun activate(selected:StreamClip){
+        val competing=synchronized(cache){cache.values.filter{it!==selected&&it.state in setOf(ClipState.PREPARING,ClipState.READY,ClipState.BUFFERING,ClipState.PLAYING,ClipState.PAUSED)}}
+        competing.forEach{old->Log.d(TAG,"replacing handle=${old.handle} state=${old.state} with=${selected.handle}");cancel(old)}
     }
     private fun startOrResume(clip:StreamClip)=synchronized(clip){
         when(clip.state){
@@ -138,4 +149,5 @@ class KoReaderServerService:Service(){
     private fun digest(value:String)=MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).take(10).joinToString(""){"%02x".format(it)}
     override fun onDestroy(){server?.close();synchronized(cache){cache.values.forEach(::cancel);cache.clear()};requestPool.shutdownNow();workPool.shutdownNow();Playback.stop();super.onDestroy()}
     override fun onBind(intent:Intent?):IBinder?=null
+    companion object { private const val TAG="UtterMuxBridge" }
 }

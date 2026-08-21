@@ -162,6 +162,7 @@ private data class Suggestion(val value:String,val label:String)
     val advice=remember(voice.id,voice.estimatedRamMb,voice.performanceClass,voice.networkRequired){HardwareAdvisor.recommend(context,voice)}
     var installed by remember(voice.id){mutableStateOf(localId.isBlank()&&app.router.isAvailable(voice)||localId.isNotBlank()&&runCatching{app.models.installed(localId)}.getOrDefault(false))}
     var repairNeeded by remember(voice.id,installed){mutableStateOf(installed&&localId.isNotBlank()&&runCatching{app.models.needsRepair(localId)}.getOrDefault(false))}
+    var missingAssets by remember(voice.id,installed){mutableStateOf(if(installed&&localId.isNotBlank())runCatching{app.models.missingAssets(localId).size}.getOrDefault(0)else 0)}
     var confirmPaid by remember{mutableStateOf(false)}
     val ready=if(localId.isNotBlank())installed else catalogReady;val canRemotePreview=voice.previewUrl.isNotBlank();val canPreview=ready||canRemotePreview
     val preview by PreviewController.state.collectAsState();val previewActive=preview.voiceId==voice.id&&preview.phase in setOf("loading","playing")
@@ -184,7 +185,7 @@ private data class Suggestion(val value:String,val label:String)
         }
         if(localId.isNotBlank())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
             if(!installed&&voice.downloadable)Button(onClick={scope.launch{onStatus("Downloading $localId…");runCatching{withContext(Dispatchers.IO){app.models.install(localId)}}.onSuccess{installed=true;app.notifyVoiceDataChanged();onChanged();onStatus("Installed ${voice.name}")}.onFailure{onStatus("Install failed: ${it.message}")}}}){Text("Download")}
-            if(installed&&repairNeeded)Button(onClick={scope.launch{onStatus("Updating $localId…");runCatching{withContext(Dispatchers.IO){app.models.repair(localId)}}.onSuccess{repairNeeded=false;app.notifyVoiceDataChanged();onChanged();onStatus("Updated ${voice.model}")}.onFailure{onStatus("Update failed: ${it.message}")}}}){Text("Update model")}
+            if(installed&&repairNeeded)Button(onClick={scope.launch{onStatus("Downloading $missingAssets missing voice file${if(missingAssets==1)"" else "s"}…");runCatching{withContext(Dispatchers.IO){app.models.repair(localId)}}.onSuccess{repairNeeded=false;missingAssets=0;app.notifyVoiceDataChanged();onChanged();onStatus("Completed ${voice.model}")}.onFailure{onStatus("Voice-file download failed: ${it.message}")}}}){Text("Complete voice files ($missingAssets)")}
             if(installed)OutlinedButton(onClick={scope.launch{onStatus("Deleting ${voice.model}…");val deleted=withContext(Dispatchers.IO){app.providers.forEach{it.trimMemory()};app.models.delete(localId)};if(deleted){installed=false;if(selected)app.settings.defaultVoice="uttermux:auto@en";app.notifyVoiceDataChanged();onChanged();onStatus("Deleted ${voice.model}")}}}){Text("Delete model")}
         }
         if(voice.attribution.isNotBlank())Text(voice.attribution,style=MaterialTheme.typography.labelSmall)
