@@ -10,12 +10,16 @@ import io.uttermux.android.router.VoiceRouter
 import io.uttermux.android.audio.AdaptiveBufferRegistry
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class UtterMuxApp : Application() {
     lateinit var secure: SecureStore; lateinit var settings: AppSettings; lateinit var router: VoiceRouter; lateinit var models: ModelManager
     lateinit var adaptiveBuffers:AdaptiveBufferRegistry;private set
     lateinit var providers:List<TtsProvider>;private set
     val voiceDataRevision=AtomicLong(1)
+    private val mutableCatalogRevision=MutableStateFlow(1L)
+    val catalogRevision=mutableCatalogRevision.asStateFlow()
     private var settingsListener:android.content.SharedPreferences.OnSharedPreferenceChangeListener?=null
     override fun onCreate() {
         super.onCreate(); instance = this
@@ -43,7 +47,7 @@ class UtterMuxApp : Application() {
         return errors
     }
     fun notifyVoiceDataChanged(broadcast:Boolean=true){
-        voiceDataRevision.incrementAndGet()
+        mutableCatalogRevision.value=voiceDataRevision.incrementAndGet()
         if(broadcast)sendBroadcast(Intent(TextToSpeech.Engine.ACTION_TTS_DATA_INSTALLED).setPackage(packageName))
     }
     override fun onTrimMemory(level:Int){

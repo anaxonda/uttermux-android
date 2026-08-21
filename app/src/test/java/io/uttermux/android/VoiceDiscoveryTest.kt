@@ -41,4 +41,13 @@ class VoiceDiscoveryTest {
         )
         assertEquals(listOf("ar"),VoiceDiscovery.filter(entries,VoiceFilters(language="ar")).single().voice.languages.toList())
     }
+
+    @Test fun globalSearchSpansVoiceServiceModelLanguageAndAccent(){
+        val bill=VoiceRecord("elevenlabs/bill@en-US","Bill · ElevenLabs",Locale.US,"elevenlabs","eleven_flash_v2_5",setOf("en-US"),true,accent="American",library="ElevenLabs",modelVersion="Flash 2.5")
+        val alba=VoiceRecord("sherpa/pocket/alba@en-GB","Alba",Locale.UK,ProviderIds.SHERPA,"Pocket INT8",setOf("en-GB"),false,accent="British",library="Pocket",modelVersion="INT8")
+        val entries=listOf(VoiceDiscovery.index(bill,true,"ElevenLabs"),VoiceDiscovery.index(alba,true,"Local models"))
+        assertEquals(listOf("Bill · ElevenLabs"),VoiceDiscovery.filter(entries,VoiceFilters(query="bill elevenlabs")).map{it.voice.name})
+        assertEquals(listOf("Alba"),VoiceDiscovery.filter(entries,VoiceFilters(query="pocket british")).map{it.voice.name})
+        assertEquals(listOf("Bill · ElevenLabs"),VoiceDiscovery.filter(entries,VoiceFilters(query="english flash")).map{it.voice.name})
+    }
 }

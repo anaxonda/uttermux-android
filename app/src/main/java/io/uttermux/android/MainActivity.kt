@@ -56,9 +56,10 @@ private enum class FilterKey(val label:String){VOICE("Voice"),LANGUAGE("Language
 @Composable private fun UtterMuxManager(theme:String,onTheme:(String)->Unit){
     val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();var page by rememberSaveable{mutableStateOf(Page.VOICES)};var revision by remember{mutableIntStateOf(0)};var status by remember{mutableStateOf("Ready")};var voiceCatalog by remember{mutableStateOf<VoiceCatalogUi?>(null)};var testArtifact by rememberSaveable{mutableStateOf("")};var filterKey by rememberSaveable{mutableStateOf(FilterKey.LANGUAGE)}
     val previewState by PreviewController.state.collectAsState();val previewBusy=previewState.phase in setOf("loading","playing")
+    val catalogRevision by app.catalogRevision.collectAsState()
     val filters=rememberVoiceFilterState();val voiceListState=rememberLazyListState()
     BackHandler(page==Page.FILTER_CHOOSER){page=Page.VOICES}
-    LaunchedEffect(revision){voiceCatalog=withContext(Dispatchers.Default){buildVoiceCatalog(app)}}
+    LaunchedEffect(revision,catalogRevision){voiceCatalog=withContext(Dispatchers.Default){buildVoiceCatalog(app)}}
     fun refresh(){scope.launch{status="Refreshing catalogs…";val errors=withContext(Dispatchers.IO){app.refreshCatalogs()};revision++;status=if(errors.isEmpty())"Catalogs refreshed" else errors.joinToString()}}
     Scaffold(topBar={if(page!=Page.FILTER_CHOOSER)TopAppBar(title={Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){if(previewState.phase=="loading")CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp);Column{Text("UtterMux");Text(if(previewBusy)previewState.message else status,style=MaterialTheme.typography.labelSmall)}}})},bottomBar={if(page!=Page.FILTER_CHOOSER)NavigationBar{
         NavigationBarItem(selected=page==Page.VOICES,onClick={page=Page.VOICES},icon={Text("◉")},label={Text("Voices")})
@@ -78,13 +79,14 @@ private class VoiceFilterState(private val initial:List<String> = emptyList()){
     private fun value(index:Int,default:String="")=initial.getOrNull(index)?:default
     var voiceSearch by mutableStateOf(value(0));var languageSearch by mutableStateOf(value(1));var librarySearch by mutableStateOf(value(2));var modelSearch by mutableStateOf(value(3));var accentSearch by mutableStateOf(value(4))
     var locality by mutableStateOf(value(5,"all"));var readiness by mutableStateOf(value(6,"all"));var performance by mutableStateOf(value(7,"all"));var gender by mutableStateOf(value(8,"all"));var capability by mutableStateOf(value(9,"all"));var cost by mutableStateOf(value(10,"all"));var sort by mutableStateOf(value(11,"name"))
-    fun values()=listOf(voiceSearch,languageSearch,librarySearch,modelSearch,accentSearch,locality,readiness,performance,gender,capability,cost,sort)
-    fun clear(){voiceSearch="";languageSearch="";librarySearch="";modelSearch="";accentSearch="";locality="all";readiness="all";performance="all";gender="all";capability="all";cost="all";sort="name"}
+    var globalSearch by mutableStateOf(value(12))
+    fun values()=listOf(voiceSearch,languageSearch,librarySearch,modelSearch,accentSearch,locality,readiness,performance,gender,capability,cost,sort,globalSearch)
+    fun clear(){globalSearch="";voiceSearch="";languageSearch="";librarySearch="";modelSearch="";accentSearch="";locality="all";readiness="all";performance="all";gender="all";capability="all";cost="all";sort="name"}
     fun get(key:FilterKey)=when(key){FilterKey.VOICE->voiceSearch;FilterKey.LANGUAGE->languageSearch;FilterKey.LIBRARY->librarySearch;FilterKey.MODEL->modelSearch;FilterKey.ACCENT->accentSearch;FilterKey.LOCATION->locality;FilterKey.AVAILABILITY->readiness;FilterKey.PERFORMANCE->performance;FilterKey.GENDER->gender;FilterKey.CAPABILITY->capability;FilterKey.COST->cost;FilterKey.SORT->sort}
     fun set(key:FilterKey,value:String){when(key){FilterKey.VOICE->voiceSearch=value;FilterKey.LANGUAGE->languageSearch=value;FilterKey.LIBRARY->{librarySearch=value;modelSearch=""};FilterKey.MODEL->modelSearch=value;FilterKey.ACCENT->accentSearch=value;FilterKey.LOCATION->locality=value;FilterKey.AVAILABILITY->readiness=value;FilterKey.PERFORMANCE->performance=value;FilterKey.GENDER->gender=value;FilterKey.CAPABILITY->capability=value;FilterKey.COST->cost=value;FilterKey.SORT->sort=value}}
     fun clear(key:FilterKey)=set(key,if(key==FilterKey.SORT)"name" else if(key in setOf(FilterKey.LOCATION,FilterKey.AVAILABILITY,FilterKey.PERFORMANCE,FilterKey.GENDER,FilterKey.CAPABILITY,FilterKey.COST))"all" else "")
     fun active()=FilterKey.entries.filter{key->val value=get(key);if(key==FilterKey.SORT)value!="name" else value.isNotBlank()&&value!="all"}
-    fun query(omit:FilterKey?=null)=VoiceFilters(if(omit==FilterKey.VOICE)"" else voiceSearch,if(omit==FilterKey.LANGUAGE)"" else languageSearch,if(omit==FilterKey.LIBRARY)"" else librarySearch,if(omit==FilterKey.MODEL)"" else modelSearch,if(omit==FilterKey.ACCENT)"" else accentSearch,if(omit==FilterKey.LOCATION)"all" else locality,if(omit==FilterKey.AVAILABILITY)"all" else readiness,if(omit==FilterKey.PERFORMANCE)"all" else performance,if(omit==FilterKey.GENDER)"all" else gender,if(omit==FilterKey.CAPABILITY)"all" else capability,if(omit==FilterKey.COST)"all" else cost,if(omit==FilterKey.SORT)"name" else sort)
+    fun query(omit:FilterKey?=null)=VoiceFilters(query=globalSearch,voice=if(omit==FilterKey.VOICE)"" else voiceSearch,language=if(omit==FilterKey.LANGUAGE)"" else languageSearch,library=if(omit==FilterKey.LIBRARY)"" else librarySearch,model=if(omit==FilterKey.MODEL)"" else modelSearch,accent=if(omit==FilterKey.ACCENT)"" else accentSearch,locality=if(omit==FilterKey.LOCATION)"all" else locality,readiness=if(omit==FilterKey.AVAILABILITY)"all" else readiness,performance=if(omit==FilterKey.PERFORMANCE)"all" else performance,gender=if(omit==FilterKey.GENDER)"all" else gender,capability=if(omit==FilterKey.CAPABILITY)"all" else capability,cost=if(omit==FilterKey.COST)"all" else cost,sort=if(omit==FilterKey.SORT)"name" else sort)
 }
 private val VoiceFilterSaver=androidx.compose.runtime.saveable.Saver<VoiceFilterState,ArrayList<String>>(save={ArrayList(it.values())},restore={VoiceFilterState(it)})
 @Composable private fun rememberVoiceFilterState()=rememberSaveable(saver=VoiceFilterSaver){VoiceFilterState()}
@@ -111,7 +113,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
     val app=UtterMuxApp.instance
     var defaultVoice by rememberSaveable{mutableStateOf(app.settings.defaultVoice)};var shown by remember{mutableStateOf<List<VoiceSearchEntry>>(emptyList())}
     LaunchedEffect(revision){defaultVoice=app.settings.defaultVoice}
-    LaunchedEffect(snapshot,filters.voiceSearch,filters.languageSearch,filters.librarySearch,filters.modelSearch,filters.accentSearch,filters.locality,filters.readiness,filters.performance,filters.gender,filters.capability,filters.cost,filters.sort){
+    LaunchedEffect(snapshot,filters.globalSearch,filters.voiceSearch,filters.languageSearch,filters.librarySearch,filters.modelSearch,filters.accentSearch,filters.locality,filters.readiness,filters.performance,filters.gender,filters.capability,filters.cost,filters.sort){
         if(snapshot==null){shown=emptyList();return@LaunchedEffect};delay(60)
         shown=withContext(Dispatchers.Default){VoiceDiscovery.filter(snapshot.entries,filters.query())}
     }
@@ -139,6 +141,7 @@ private fun buildVoiceCatalog(app:UtterMuxApp):VoiceCatalogUi {
                             DropdownMenu(filterMenuOpen,{filterMenuOpen=false}){FilterKey.entries.forEach{key->DropdownMenuItem(text={Text(key.label)},onClick={filterMenuOpen=false;onFilter(key)})}}
                         }
                     }
+                    OutlinedTextField(filters.globalSearch,{filters.globalSearch=it},Modifier.fillMaxWidth(),label={Text("Search all voices")},placeholder={Text("Voice, service, model, language, accent…")},singleLine=true,trailingIcon={if(filters.globalSearch.isNotBlank())IconButton({filters.globalSearch=""}){Text("×")}})
                     if(activeFilters.isNotEmpty())LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){
                         items(activeFilters,key={it.name}){key->InputChip(selected=true,onClick={onFilter(key)},label={Text("${key.label}: ${filterDisplay(snapshot,key,filters.get(key))}")},trailingIcon={IconButton(onClick={filters.clear(key)},Modifier.size(24.dp)){Text("×")}})}
                     }

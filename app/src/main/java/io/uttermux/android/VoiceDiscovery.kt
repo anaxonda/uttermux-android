@@ -17,6 +17,7 @@ data class VoiceSearchEntry(
 )
 
 data class VoiceFilters(
+    val query:String="",
     val voice:String="",
     val language:String="",
     val library:String="",
@@ -75,7 +76,11 @@ object VoiceDiscovery {
     fun filter(entries:List<VoiceSearchEntry>,filters:VoiceFilters):List<VoiceSearchEntry> {
         return entries.asSequence().filter{entry->
             val voice=entry.voice
-            (filters.voice.isBlank()||voice.name.equals(filters.voice,true))&&
+            (filters.query.isBlank()||filters.query.lowercase().split(Regex("\\s+")).filter(String::isNotBlank).all{
+                term->term in listOf(entry.searchableVoice,entry.searchableLanguage,entry.searchableLibrary,
+                    entry.searchableModel,entry.searchableAccent).joinToString(" ")
+            })&&
+                (filters.voice.isBlank()||voice.name.equals(filters.voice,true))&&
                 (filters.language.isBlank()||voice.languages.any{it.equals(filters.language,true)})&&
                 (filters.library.isBlank()||entry.library.equals(filters.library,true))&&
                 (filters.model.isBlank()||entry.model.equals(filters.model,true))&&

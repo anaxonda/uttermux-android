@@ -26,8 +26,9 @@ uses the same catalog contract and routing concepts.
 - Early `onStart`, adaptively reserved incremental PCM delivery, exact text
   ranges, cancellation, engine warming, segmented Piper synthesis, and bounded
   silence trimming.
-- A pre-indexed, debounced voice catalog with a searchable, single-select screen
-  for every filter dimension; dependent result counts; availability, location,
+- A pre-indexed, debounced voice catalog with one global voice search and a
+  searchable, single-select screen for every filter dimension; dependent result
+  counts; availability, location,
   capability, cost, performance, gender, size, and speed controls; one-tap
   clearing; exact-voice previews;
   ordered BCP-47 fallback routes, model downloads, settings, and diagnostics.
@@ -53,8 +54,8 @@ excluded from backup and device transfer.
 
 ## App navigation
 
-- **Voices** shows the active voice, result count, voice cards, and only the
-  filters currently in use. The **Filter** menu chooses a dimension; each
+- **Voices** shows the active voice, a global search field, result count, voice
+  cards, and only the filters currently in use. The **Filter** menu chooses a dimension; each
   dimension opens a full-screen searchable chooser rather than a popup list.
   Choosers show conditional voice counts, alphabetical/count sorting for large
   lists, and single selection. Location uses Offline/Online consistently with
