@@ -13,3 +13,8 @@ test "$qwen_commit" = 16bb5afcd06311031c72a8488f8d59660dc2fb46
 test "$ggml_commit" = af97976c7810cdabb1863172f31c432dab767de7
 test -z "$(git -C external/qwen3-tts.cpp status --short)"
 printf 'Qwen native provenance verified\n'
+
+espeak_commit=$(git -C external/espeak-ng rev-parse HEAD)
+test "$espeak_commit" = 7d426728fe146f4168fa716e29d8e276c7da33f2
+test -z "$(git -C external/espeak-ng status --short)"
+printf 'eSpeak NG native provenance verified\n'

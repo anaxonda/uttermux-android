@@ -18,7 +18,7 @@ android {
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild {
             cmake {
-                targets += "qwen3_tts_jni"
+                targets += listOf("qwen3_tts_jni","ttsespeak")
                 arguments += listOf(
                     "-DANDROID_STL=c++_shared",
                     "-DQWEN3_ANDROID_OPENMP=OFF",
@@ -52,6 +52,28 @@ android {
         buildTypes.getByName("release").signingConfig=signingConfigs.getByName("release")
     }
 }
+
+val espeakRoot=rootProject.layout.projectDirectory.dir("external/espeak-ng")
+val espeakHostBuild=layout.buildDirectory.dir("espeak-host")
+val espeakGeneratedRes=layout.buildDirectory.dir("generated/espeak-res")
+val configureEspeakData by tasks.registering(Exec::class){
+    inputs.file(espeakRoot.file("CMakeLists.txt"));outputs.file(espeakHostBuild.map{it.file("build.ninja")})
+    commandLine("cmake","-S",espeakRoot.asFile,"-B",espeakHostBuild.get().asFile,"-G","Ninja","-DUSE_LIBSONIC=OFF","-DUSE_ASYNC=OFF","-DUSE_MBROLA=OFF","-DCMAKE_BUILD_TYPE=Release")
+}
+val seedEspeakData by tasks.registering(Copy::class){
+    dependsOn(configureEspeakData);from(espeakRoot.dir("espeak-ng-data"));into(espeakHostBuild.map{it.dir("espeak-ng-data")})
+}
+val buildEspeakData by tasks.registering(Exec::class){
+    dependsOn(seedEspeakData);inputs.dir(espeakRoot.dir("dictsource"));outputs.dir(espeakHostBuild.map{it.dir("espeak-ng-data")})
+    commandLine("cmake","--build",espeakHostBuild.get().asFile,"--target","data","--parallel","2")
+}
+val packageEspeakData by tasks.registering(Zip::class){
+    dependsOn(buildEspeakData);from(espeakHostBuild.map{it.dir("espeak-ng-data")}){into("espeak-ng-data")}
+    archiveFileName.set("espeakdata.zip");destinationDirectory.set(espeakGeneratedRes.map{it.dir("raw")})
+    isPreserveFileTimestamps=false;isReproducibleFileOrder=true
+}
+android.sourceSets.getByName("main").res.srcDir(espeakGeneratedRes.get().asFile)
+tasks.named("preBuild").configure{dependsOn(packageEspeakData)}
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.06.00")

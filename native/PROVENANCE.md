@@ -11,3 +11,8 @@ with ONNX Runtime 1.27.0 and the Pocket patch in this directory.
 
 These hashes identify development artifacts; they are not a substitute for an
 F-Droid source build. Release automation must reproduce and compare them.
+
+The embedded eSpeak NG runtime and generated language data are built from the
+git submodule pinned at `7d426728fe146f4168fa716e29d8e276c7da33f2`. The app
+compiles upstream's Android JNI source directly; no prebuilt eSpeak library is
+checked in.

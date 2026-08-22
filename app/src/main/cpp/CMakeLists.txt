@@ -6,6 +6,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+set(ESPEAK_NG_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../external/espeak-ng")
+set(USE_ASYNC OFF CACHE BOOL "" FORCE)
+set(USE_MBROLA OFF CACHE BOOL "" FORCE)
+set(USE_LIBSONIC OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory("${ESPEAK_NG_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/espeak-ng" EXCLUDE_FROM_ALL)
+find_library(ANDROID_LOG_LIBRARY log)
+add_library(ttsespeak SHARED "${ESPEAK_NG_ROOT}/android/jni/jni/eSpeakService.c")
+target_include_directories(ttsespeak PRIVATE "${ESPEAK_NG_ROOT}/android/jni/include")
+target_link_libraries(ttsespeak PRIVATE espeak-ng "${ANDROID_LOG_LIBRARY}")
+
 set(QWEN3_TTS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../external/qwen3-tts.cpp")
 set(GGML_DIR "${QWEN3_TTS_ROOT}/ggml")
 

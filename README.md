@@ -23,6 +23,8 @@ uses the same catalog contract and routing concepts.
 
 - Android `TextToSpeechService` integration for applications using the standard
   system API.
+- Embedded eSpeak NG runtime and language data for compact, multilingual
+  offline speech with no voice download.
 - Early `onStart`, adaptively reserved incremental PCM delivery, exact text
   ranges, cancellation, engine warming, segmented Piper synthesis, and bounded
   silence trimming.
@@ -76,8 +78,9 @@ start clean after a complete process relaunch.
 
 ## Models available in the Android app
 
-Every row below appears in the Android voice catalog and has an implemented
-download and synthesis path. No model is bundled. Sizes and RAM are catalog
+Every row below has an implemented Android synthesis path. Neural models require
+an explicit download; eSpeak NG ships as the compact runtime and language-data
+fallback. Sizes and RAM are catalog
 metadata and can change when upstream artifacts change; they are not universal
 hardware requirements.
 
@@ -88,6 +91,7 @@ means a reference recording must be configured before a system voice exists.
 
 | Family | Android | Linux | Current boundary |
 | --- | --- | --- | --- |
+| eSpeak NG | Embedded runtime; 100+ languages/accents | Installed system engine | Formant synthesis; no model download |
 | Piper/VITS | Yes; generated pinned catalog | Yes; generated pinned catalog | Fixed voices |
 | Inflect Nano/Micro | Nano and Micro | Nano | Fixed English voices |
 | Kitten | FP16 v0.1 and INT8 v0.8 | FP16 v0.1 and INT8 v0.8 | Fixed English voices |
@@ -158,6 +162,8 @@ memory, sustained RTF, and multi-client reader tests.
 ## Build and install
 
 ```sh
+git clone --recurse-submodules https://github.com/anaxonda/uttermux-android
+cd uttermux-android
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 export ANDROID_HOME=$HOME/Android/Sdk
 unset ANDROID_SDK_ROOT
@@ -176,9 +182,9 @@ scripts/device-test.sh
 scripts/device-test.sh io.uttermux.android.PiperPreviewTest
 ```
 
-UtterMux deliberately ships with **no voice or model in the APK**. The first-run
-catalog therefore has no ready offline voice until one is downloaded. This keeps
-the engine small and makes every model/license choice explicit.
+UtterMux deliberately ships with **no neural voice model in the APK**. The
+embedded eSpeak NG runtime provides a ready offline fallback at first launch;
+every neural model remains an explicit, separately licensed download.
 
 ## Shared catalog
 

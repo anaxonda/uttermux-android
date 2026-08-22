@@ -1,3 +1,6 @@
 [submodule "external/qwen3-tts.cpp"]
 	path = external/qwen3-tts.cpp
 	url = https://github.com/Danmoreng/qwen3-tts.cpp.git
+[submodule "external/espeak-ng"]
+	path = external/espeak-ng
+	url = https://github.com/espeak-ng/espeak-ng.git

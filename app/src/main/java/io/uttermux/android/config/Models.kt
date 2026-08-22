@@ -3,7 +3,7 @@ package io.uttermux.android.config
 import java.util.Locale
 
 object ProviderIds {
-    const val GROK="grok";const val ELEVENLABS="elevenlabs";const val EDGE="edge";const val SHERPA="sherpa";const val QWEN_LOCAL="qwen-local"
+    const val ESPEAK="espeak";const val GROK="grok";const val ELEVENLABS="elevenlabs";const val EDGE="edge";const val SHERPA="sherpa";const val QWEN_LOCAL="qwen-local"
     const val AZURE="azure";const val GOOGLE="google";const val QWEN="qwen";const val OPENAI="openai"
     const val DEEPGRAM="deepgram";const val AWS="aws";const val CARTESIA="cartesia";const val PLAYHT="playht"
     const val RESEMBLE="resemble";const val CUSTOM="custom"
