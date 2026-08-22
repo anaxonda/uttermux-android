@@ -30,6 +30,8 @@ data class VoiceFilters(
     val capability:String="all",
     val cost:String="all",
     val sort:String="name",
+    val favoritesOnly:Boolean=false,
+    val favoriteIds:Set<String> = emptySet(),
 )
 
 object VoiceDiscovery {
@@ -90,7 +92,8 @@ object VoiceDiscovery {
                 (filters.performance=="all"||voice.performanceClass.equals(filters.performance,true))&&
                 (filters.gender=="all"||voice.gender.equals(filters.gender,true))&&
                 (filters.capability=="all"||filters.capability in voice.capabilities)&&
-                (filters.cost=="all"||cost(voice).equals(filters.cost,true))
+                (filters.cost=="all"||cost(voice).equals(filters.cost,true))&&
+                (!filters.favoritesOnly||voice.id in filters.favoriteIds)
         }.let{sequence->when(filters.sort){
             "smallest"->sequence.sortedWith(compareBy<VoiceSearchEntry>({it.voice.approxSizeMb.takeIf{n->n>0}?:Int.MAX_VALUE},{it.voice.name}))
             "fastest"->sequence.sortedWith(compareBy<VoiceSearchEntry>({when(it.voice.performanceClass){"fast"->0;"balanced"->1;"heavy"->2;else->3}},{it.voice.name}))

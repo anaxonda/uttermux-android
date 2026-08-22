@@ -39,17 +39,23 @@ class KoReaderServerService:Service(){
         super.onCreate();val manager=getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel("koreader",getString(R.string.koreader_channel),NotificationManager.IMPORTANCE_LOW))
         val pending=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE)
+        val lan=app.settings.koReaderLanEnabled
+        val address=koReaderBindAddress(lan)
         startForeground(5000,Notification.Builder(this,"koreader").setSmallIcon(android.R.drawable.ic_lock_silent_mode_off)
-            .setContentTitle("UtterMux for KOReader").setContentText("Listening on localhost:5000").setContentIntent(pending).build())
-        server=ServerSocket().apply{reuseAddress=true;bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"),5000))}
+            .setContentTitle("UtterMux for KOReader")
+            .setContentText(if(lan)"Listening on hotspot/LAN port 5000 · no authentication" else "Listening on localhost:5000")
+            .setContentIntent(pending).build())
+        server=ServerSocket().apply{reuseAddress=true;bind(InetSocketAddress(InetAddress.getByName(address),5000))}
         requestPool.execute(::acceptLoop)
     }
     private fun acceptLoop(){while(true)try{server?.accept()?.let{socket->socket.soTimeout=5_000;requestPool.execute{handle(socket)}}?:return}catch(_:IOException){return}}
     private fun handle(socket:Socket)=socket.use{connection->
         try{
+            require(connection.inetAddress.isLoopbackAddress||connection.inetAddress.isSiteLocalAddress){"Remote address is not on the local network"}
             val input=BufferedInputStream(connection.getInputStream());val output=BufferedOutputStream(connection.getOutputStream())
             val header=readHeader(input);val first=header.lineSequence().first().split(' ');val method=first[0];val path=first[1].substringBefore('?')
             val length=Regex("(?im)^Content-Length:\\s*(\\d+)").find(header)?.groupValues?.get(1)?.toInt()?:0
+            require(length in 0..1_048_576){"Request body is too large"}
             val body=if(length>0)String(readBytes(input,length),Charsets.UTF_8)else "{}";val json=JSONObject(body)
             when{
                 method=="GET"&&path=="/voices"->respond(output,200,voices(),"application/json")

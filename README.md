@@ -57,7 +57,9 @@ excluded from backup and device transfer.
 ## App navigation
 
 - **Voices** shows the active voice, a global search field, result count, voice
-  cards, and only the filters currently in use. The **Filter** menu chooses a dimension; each
+  cards, persistent favorites, and only the filters currently in use. Any voice
+  can be favorited before or after it is downloaded, and **Favorites** is an
+  independent filter. The **Filter** menu chooses a dimension; each
   dimension opens a full-screen searchable chooser rather than a popup list.
   Choosers show conditional voice counts, alphabetical/count sorting for large
   lists, and single selection. Location uses Offline/Online consistently with
@@ -222,13 +224,18 @@ voices in the middle of an utterance. Language routes use exact BCP-47 matches,
 then base-language matches, then the global default and local-only safe
 fallbacks.
 
-## Legacy localhost compatibility adapter
+## KOReader compatibility adapter
 
 Android applications normally use UtterMux through `TextToSpeechService` and do
-not need this adapter. For clients that require the older localhost protocol,
-enable the compatibility server in UtterMux and install `TTS.koplugin` under
-`/sdcard/koreader/plugins/`. The server binds only IPv4 loopback at
-`127.0.0.1:5000` and implements `/voices`, `/`, `/play`, `/stop`, `/remaining`,
+not need this adapter. Enable the compatibility server in UtterMux and install
+`TTS.koplugin` under `/sdcard/koreader/plugins/`. By default the server binds
+only IPv4 loopback at `127.0.0.1:5000`. An additional explicit **Allow
+hotspot/LAN clients** switch binds port 5000 on the phone's network interfaces,
+allowing a separate e-reader to submit text while audio plays on the phone or
+its Bluetooth output. This mode has no application-layer authentication; use
+it only on a trusted personal hotspot or LAN and disable it afterward.
+
+The adapter implements `/voices`, `/`, `/play`, `/stop`, `/remaining`,
 `/pause`, `/resume`, and `/health`. Synthesis and playback are concurrent, so
 KOReader no longer
 waits for a complete passage before hearing audio.

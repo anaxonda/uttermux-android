@@ -3,6 +3,8 @@ package io.uttermux.android.config
 import android.content.Context
 import android.content.SharedPreferences
 
+fun koReaderBindAddress(lanEnabled:Boolean)=if(lanEnabled)"0.0.0.0" else "127.0.0.1"
+
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val benchmarkThreads=java.util.concurrent.ConcurrentHashMap<String,Int>()
@@ -12,6 +14,15 @@ class AppSettings(context: Context) {
     var koReaderEnabled: Boolean
         get() = prefs.getBoolean("koreader_enabled", false)
         set(value) { prefs.edit().putBoolean("koreader_enabled", value).apply() }
+    var koReaderLanEnabled: Boolean
+        get() = prefs.getBoolean("koreader_lan_enabled", false)
+        set(value) { prefs.edit().putBoolean("koreader_lan_enabled", value).apply() }
+    fun favoriteVoices():Set<String> = prefs.getStringSet("favorite_voices", emptySet()).orEmpty().toSet()
+    fun isFavorite(voiceId:String)=voiceId in favoriteVoices()
+    fun setFavorite(voiceId:String,favorite:Boolean){
+        val values=favoriteVoices().toMutableSet();if(favorite)values+=voiceId else values-=voiceId
+        prefs.edit().putStringSet("favorite_voices",values).apply()
+    }
     var theme: String
         get() = prefs.getString("theme", "system")!!
         set(value) { prefs.edit().putString("theme", value).apply() }

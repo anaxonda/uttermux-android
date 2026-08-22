@@ -2,6 +2,7 @@ package io.uttermux.android
 
 import io.uttermux.android.config.ProviderIds
 import io.uttermux.android.config.VoiceRecord
+import io.uttermux.android.config.koReaderBindAddress
 import java.util.Locale
 import org.junit.Assert.*
 import org.junit.Test
@@ -49,5 +50,20 @@ class VoiceDiscoveryTest {
         assertEquals(listOf("Bill · ElevenLabs"),VoiceDiscovery.filter(entries,VoiceFilters(query="bill elevenlabs")).map{it.voice.name})
         assertEquals(listOf("Alba"),VoiceDiscovery.filter(entries,VoiceFilters(query="pocket british")).map{it.voice.name})
         assertEquals(listOf("Bill · ElevenLabs"),VoiceDiscovery.filter(entries,VoiceFilters(query="english flash")).map{it.voice.name})
+    }
+
+    @Test fun favoritesAreAnIndependentFilter(){
+        val entries=listOf(
+            VoiceDiscovery.index(voice(ProviderIds.SHERPA,"Kokoro"),true,"Kokoro"),
+            VoiceDiscovery.index(voice("edge","Edge",network=true),true,"Edge"),
+        )
+        val favorite=entries.last().voice.id
+        assertEquals(listOf(favorite),VoiceDiscovery.filter(entries,VoiceFilters(
+            favoritesOnly=true,favoriteIds=setOf(favorite))).map{it.voice.id})
+    }
+
+    @Test fun koreaderLanModeIsExplicitlyWildcardBound(){
+        assertEquals("127.0.0.1",koReaderBindAddress(false))
+        assertEquals("0.0.0.0",koReaderBindAddress(true))
     }
 }

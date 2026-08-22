@@ -19,13 +19,25 @@ import io.uttermux.android.provider.CloudContracts
 import io.uttermux.android.diagnostics.Diagnostics
 import io.uttermux.android.service.KoReaderServerService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.net.Inet4Address
+import java.net.NetworkInterface
+
+private fun lanAddresses():String = runCatching{
+    NetworkInterface.getNetworkInterfaces().toList().flatMap{it.inetAddresses.toList()}
+        .filterIsInstance<Inet4Address>().filter{!it.isLoopbackAddress&&it.isSiteLocalAddress}
+        .map{it.hostAddress.orEmpty()}.filter(String::isNotBlank).distinct().joinToString { "$it:5000" }
+}.getOrDefault("").ifBlank{"phone hotspot address, port 5000"}
 
 @Composable internal fun ModernSettingsPage(revision:Int,theme:String,onTheme:(String)->Unit,onRefresh:()->Unit,onChanged:()->Unit,onStatus:(String)->Unit){
     val app=UtterMuxApp.instance;val scope=rememberCoroutineScope();val clipboard=LocalClipboardManager.current
     var providersOpen by remember{mutableStateOf(true)};var expandedProvider by remember{mutableStateOf("")};var routesOpen by remember{mutableStateOf(false)};var storageOpen by remember{mutableStateOf(false)};var advancedOpen by remember{mutableStateOf(false)};var diagnosticsOpen by remember{mutableStateOf(false)};var aboutOpen by remember{mutableStateOf(false)}
-    var koReader by remember{mutableStateOf(app.settings.koReaderEnabled)};val values=remember{mutableStateMapOf<String,String>()}
+    var koReader by remember{mutableStateOf(app.settings.koReaderEnabled)}
+    var koReaderLan by remember{mutableStateOf(app.settings.koReaderLanEnabled)}
+    val values=remember{mutableStateMapOf<String,String>()}
+    fun restartBridge(){val intent=Intent(app,KoReaderServerService::class.java);app.stopService(intent);if(koReader)scope.launch{delay(200);if(app.settings.koReaderEnabled)app.startForegroundService(intent)}}
     val onlineProviders=remember(revision){app.router.providerDescriptors.filter{it.network}}
     LaunchedEffect(revision){val loaded=withContext(Dispatchers.IO){onlineProviders.flatMap{it.credentialFields}.associate{it.key to app.secure.get(it.key)}};values.putAll(loaded)}
 
@@ -42,7 +54,10 @@ import kotlinx.coroutines.withContext
         item{Text("General",style=MaterialTheme.typography.titleMedium)}
         item{SettingsSelector("Theme",theme,listOf("system","light","dark"),onTheme)}
         item{Button(onClick={app.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}){Text("Open Android TTS settings")}}
-        item{Card{Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically){Switch(koReader,{enabled->koReader=enabled;app.settings.koReaderEnabled=enabled;val intent=Intent(app,KoReaderServerService::class.java);if(enabled)app.startForegroundService(intent)else app.stopService(intent)});Spacer(Modifier.width(10.dp));Column{Text("KOReader compatibility bridge");Text("Local-only service at 127.0.0.1:5000",style=MaterialTheme.typography.bodySmall)}}}}
+        item{Card{Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+            Row(verticalAlignment=Alignment.CenterVertically){Switch(koReader,{enabled->koReader=enabled;app.settings.koReaderEnabled=enabled;restartBridge()});Spacer(Modifier.width(10.dp));Column{Text("KOReader compatibility bridge");Text(if(koReaderLan)"Hotspot/LAN service at ${lanAddresses()}" else "Local-only service at 127.0.0.1:5000",style=MaterialTheme.typography.bodySmall)}}
+            Row(verticalAlignment=Alignment.CenterVertically){Switch(koReaderLan,{enabled->koReaderLan=enabled;app.settings.koReaderLanEnabled=enabled;restartBridge()},enabled=koReader);Spacer(Modifier.width(10.dp));Column{Text("Allow hotspot/LAN clients");Text("No authentication. Any device on the connected network can submit text and control phone playback.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)}}
+        }}}
 
         item{SettingsSectionButton("Online services (${onlineProviders.size})",providersOpen){providersOpen=!providersOpen}}
         if(providersOpen){
